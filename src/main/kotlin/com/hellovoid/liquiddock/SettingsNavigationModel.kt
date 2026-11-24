@@ -105,7 +105,6 @@ internal val layoutEntries = listOf(
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏间距与分屏布局"),
     HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、尺寸、位置与最近程序"),
     HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock、所有应用布局与多分屏"),
-    HubEntry(Page.Recents, R.string.page_recents, "多任务壁纸背景与模糊"),
 )
 
 internal val glassEntries = listOf(
@@ -113,6 +112,7 @@ internal val glassEntries = listOf(
     HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹与菜单外观"),
     HubEntry(Page.SoftGlass, R.string.page_soft_glass, "OS4 系统桌面原生柔光玻璃参数"),
     HubEntry(Page.SoftGlassComponents, R.string.page_soft_glass_components, "桌面图标与小组件柔光玻璃"),
+    HubEntry(Page.Recents, R.string.page_recents, "多任务、文件夹、所有应用与菜单背景模糊"),
     HubEntry(Page.AnimationSystem, R.string.page_animation_system, "通知与控制中心顶部模糊、系统手势手柄联动"),
     HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
 )

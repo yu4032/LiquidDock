@@ -3,7 +3,7 @@
     <string name="app_name">LiquidDock4</string>
     <string name="action_back">Back</string>
     <string name="page_grid">Home screen layout</string>
-    <string name="page_dock">Dock size and blur</string>
+    <string name="page_dock">Dock Customization</string>
     <string name="page_dock_recent_blacklist">Recent apps blacklist</string>
     <string name="dock_recent_blacklist_header_summary">Shows apps currently eligible for Dock recommendations. Blocked apps are kept in a separate list and skipped so the next eligible recent app can fill the slot.</string>
     <string name="dock_recent_blacklist_load_title">Load current recommendation candidates</string>
@@ -19,7 +19,7 @@
     <string name="dock_recent_blacklist_blocked_inactive_item">Blocked, not currently a candidate · %1$s</string>
     <string name="page_divider">Dock divider</string>
     <string name="page_workstation">Workstation / Multi-Window</string>
-    <string name="page_recents">Recents</string>
+    <string name="page_recents">Interface Blur</string>
     <string name="page_liquid">Liquid glass</string>
     <string name="page_sidebar_glass">Security Center sidebar glass</string>
     <string name="page_soft_glass">Soft-light glass</string>
@@ -75,7 +75,7 @@
     <string name="option_off">Off</string>
     <string name="workstation_customization">Custom workstation</string>
     <string name="workstation_customization_summary">Workstation Dock icon vertical offsets update live when installed; All Apps spacing adapts to the current grid column count. Icon glass corners and layout changes still require a launcher restart</string>
-    <string name="recents_header_summary">Adjust wallpaper blur behind task cards; applies immediately when the Launcher hook is loaded.</string>
+    <string name="recents_header_summary">Adjust system background blur for Recents, open folders, All Apps, and shortcut menus; applies immediately when the Launcher hook is loaded.</string>
     <string name="liquid_enable">Enable liquid glass</string>
     <string name="liquid_enable_summary">Turning off removes the current glass effect immediately; after enabling, some scenes require a launcher restart to take effect</string>
     <string name="liquid_security_center_glass_enable">Security Center sidebar glass</string>

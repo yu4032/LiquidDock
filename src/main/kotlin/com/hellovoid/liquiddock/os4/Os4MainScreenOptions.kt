@@ -141,6 +141,9 @@ data class Os4MainScreenOptions(
     val glassIconCorner: Double = 0.0,
     val recentsBlurPercent: Int = 100,
     val allAppsBlurPercent: Int = 100,
+    val wsAllAppsBlurPercent: Int = 100,
+    val folderBlurPercent: Int = 100,
+    val shortcutBlurPercent: Int = 100,
     val workstation: Os4WorkstationOptions = Os4WorkstationOptions(),
 ) {
     companion object {
@@ -298,7 +301,10 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Divider.ALPHA,
             ).forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name())
+            add(ConfigSchema.Recents.FOLDER_BLUR_PERCENT.name())
+            add(ConfigSchema.Recents.SHORTCUT_BLUR_PERCENT.name())
             add(ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT.name())
+            add(ConfigSchema.Workstation.WS_ALL_APPS_BLUR_PERCENT.name())
             add(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name())
             add(ConfigSchema.Workstation.TASKBAR_MODE.name())
             add(ConfigSchema.Workstation.DESKTOP_SYNC_NORMAL.name())
@@ -437,11 +443,15 @@ data class Os4MainScreenOptions(
                     ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_OVERRIDES,
                 ) ?: return null
                 val recentsBlurPercent = integer(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT)
+                val folderBlurPercent = integer(ConfigSchema.Recents.FOLDER_BLUR_PERCENT)
+                val shortcutBlurPercent = integer(ConfigSchema.Recents.SHORTCUT_BLUR_PERCENT)
                 val allAppsBlurPercent = integer(ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT)
+                val wsAllAppsBlurPercent = integer(ConfigSchema.Workstation.WS_ALL_APPS_BLUR_PERCENT)
                 val workstationEnabled = boolean(ConfigSchema.Workstation.DOCK_CUSTOMIZATION)
                 if (!grid && !icons && !bigFolder && !folderGrid && !dockEnabled && !dividerEnabled && !glassEnabled &&
                     !widgetOverrides && !preventWidgetStretch && recentsBlurPercent == 100 &&
-                    allAppsBlurPercent == 100 && !workstationEnabled) ""
+                    folderBlurPercent == 100 && shortcutBlurPercent == 100 &&
+                    allAppsBlurPercent == 100 && wsAllAppsBlurPercent == 100 && !workstationEnabled) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -508,6 +518,9 @@ data class Os4MainScreenOptions(
                             glassIconCorner = if (glassIcons) dp(ConfigSchema.Glass.ICON_CORNER_RADIUS) else 0.0,
                             recentsBlurPercent = recentsBlurPercent,
                             allAppsBlurPercent = allAppsBlurPercent,
+                            wsAllAppsBlurPercent = wsAllAppsBlurPercent,
+                            folderBlurPercent = folderBlurPercent,
+                            shortcutBlurPercent = shortcutBlurPercent,
                             workstation = if (workstationEnabled) {
                                 Os4WorkstationOptions(
                                     dockCustomization = true,

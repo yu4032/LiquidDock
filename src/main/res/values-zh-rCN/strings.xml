@@ -3,7 +3,7 @@
     <string name="app_name">LiquidDock4</string>
     <string name="action_back">返回</string>
     <string name="page_grid">主屏幕布局</string>
-    <string name="page_dock">Dock 尺寸与模糊</string>
+    <string name="page_dock">Dock 自定义</string>
     <string name="page_dock_recent_blacklist">最近程序黑名单</string>
     <string name="dock_recent_blacklist_header_summary">显示当前可进入 Dock 最近程序推荐的候选。已拉黑程序会单独列出，并在推荐时跳过，由后续可用程序补位。</string>
     <string name="dock_recent_blacklist_load_title">载入当前推荐候选</string>
@@ -19,7 +19,7 @@
     <string name="dock_recent_blacklist_blocked_inactive_item">已拉黑，当前不在候选 · %1$s</string>
     <string name="page_divider">Dock 分隔线</string>
     <string name="page_workstation">工作台/多窗口</string>
-    <string name="page_recents">多任务</string>
+    <string name="page_recents">界面模糊设置</string>
     <string name="page_liquid">液态玻璃</string>
     <string name="page_sidebar_glass">安全中心侧边栏玻璃</string>
     <string name="page_soft_glass">柔光玻璃</string>
@@ -75,7 +75,7 @@
     <string name="option_off">关闭</string>
     <string name="workstation_customization">自定义工作台</string>
     <string name="workstation_customization_summary">已加载的工作台 Dock 图标垂直偏移可即时更新；所有应用间距适配当前实际网格列数；Dock 图标玻璃圆角和布局调整仍需重启桌面生效</string>
-    <string name="recents_header_summary">调整任务卡片后方的系统壁纸模糊程度；桌面 Hook 已加载时即时生效。</string>
+    <string name="recents_header_summary">调整多任务、展开文件夹、所有应用与长按菜单的系统背景模糊程度；桌面 Hook 已加载时即时生效。</string>
     <string name="liquid_enable">启用液态玻璃</string>
     <string name="liquid_enable_summary">关闭会立即移除当前玻璃效果；重新启用后部分场景需重启桌面生效</string>
     <string name="liquid_security_center_glass_enable">安全中心侧边栏玻璃</string>

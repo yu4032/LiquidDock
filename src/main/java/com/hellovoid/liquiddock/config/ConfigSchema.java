@@ -852,6 +852,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> ALL_APPS_BLUR_PERCENT = integer(
                 "workstation_all_apps_blur_percent", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> WS_ALL_APPS_BLUR_PERCENT = integer(
+                "workstation_laptop_all_apps_blur_percent", 100, 100, 100, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DESKTOP_SYNC_NORMAL = bool(
                 "workstation_desktop_sync_normal", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET = dp(
@@ -884,6 +887,12 @@ public final class ConfigSchema {
     public static final class Recents {
         public static final ConfigKey<Integer> BACKGROUND_BLUR_PERCENT = integer(
                 "recents_background_blur_percent", 100, 100, 100, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FOLDER_BLUR_PERCENT = integer(
+                "os4_folder_blur_percent", 100, 100, 100, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> SHORTCUT_BLUR_PERCENT = integer(
+                "os4_shortcut_blur_percent", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DISABLE_WALLPAPER_DIMMING = bool(
                 "recents_disable_wallpaper_dimming", false, false, false,
@@ -1036,6 +1045,7 @@ public final class ConfigSchema {
                 Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET,
                 Workstation.ALL_APPS_BLUR_PERCENT,
+                Workstation.WS_ALL_APPS_BLUR_PERCENT,
                 Workstation.DESKTOP_SYNC_NORMAL,
                 Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET,
                 Workstation.DESKTOP_LANDSCAPE_TOP_SPACING,
@@ -1045,7 +1055,8 @@ public final class ConfigSchema {
                 Workstation.DESKTOP_PORTRAIT_TOP_SPACING,
                 Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING,
                 Workstation.DESKTOP_PORTRAIT_INDICATOR_Y);
-        add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
+        add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.FOLDER_BLUR_PERCENT,
+                Recents.SHORTCUT_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
         add(keys, Debug.LOGGING);
         return Collections.unmodifiableList(keys);
     }

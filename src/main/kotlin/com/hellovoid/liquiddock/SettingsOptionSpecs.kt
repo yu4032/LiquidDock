@@ -184,7 +184,6 @@ internal val splitGridSpecs = listOf(
     ),
 )
 internal val dockSpecs = listOf(
-    IntSpec(ConfigSchema.Dock.BLUR_RADIUS, "模糊强度", "", summary = "重启桌面生效"),
     IntSpec(ConfigSchema.Dock.HEIGHT_OFFSET, "高度偏移", summary = "重启桌面生效"),
     IntSpec(ConfigSchema.Dock.WIDTH_OFFSET, "宽度偏移", summary = "重启桌面生效"),
     IntSpec(ConfigSchema.Dock.BLUR_CORNER_OFFSET, "内部模糊圆角偏移", summary = "重启桌面生效"),
@@ -276,9 +275,33 @@ internal val workstationSpecs = listOf(
 )
 internal val recentsBlurSpec = IntSpec(
     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
-    "背景模糊程度",
+    "多任务背景模糊程度",
     "%",
-    summary = "控制进入多任务界面后壁纸背景的系统模糊；保留系统过渡动画；重启桌面生效",
+    summary = "控制进入多任务界面后壁纸背景的系统模糊；保留系统过渡动画",
+)
+internal val folderBlurSpec = IntSpec(
+    ConfigSchema.Recents.FOLDER_BLUR_PERCENT,
+    "展开文件夹背景模糊程度",
+    "%",
+    summary = "控制展开文件夹后的全屏背景系统模糊；0% 完全清晰，100% 保持原生",
+)
+internal val allAppsBlurSpec = IntSpec(
+    ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT,
+    "抽屉模式所有应用背景模糊",
+    "%",
+    summary = "控制抽屉模式所有应用页面的背景系统模糊；0% 完全清晰，100% 保持原生",
+)
+internal val wsAllAppsBlurSpec = IntSpec(
+    ConfigSchema.Workstation.WS_ALL_APPS_BLUR_PERCENT,
+    "工作台所有应用背景模糊",
+    "%",
+    summary = "控制工作台模式所有应用页面的背景系统模糊；0% 完全清晰，100% 保持原生",
+)
+internal val shortcutBlurSpec = IntSpec(
+    ConfigSchema.Recents.SHORTCUT_BLUR_PERCENT,
+    "长按快捷菜单背景模糊程度",
+    "%",
+    summary = "控制桌面长按图标弹出菜单时的背景系统模糊；0% 完全清晰，100% 保持原生",
 )
 internal val iconSizeOffsetSpec = IntSpec(ConfigSchema.Glass.ICON_SIZE_OFFSET, "图标尺寸偏移", "dp/边", summary = "重启桌面生效")
 internal val iconCornerRadiusSpec = IntSpec(ConfigSchema.Glass.ICON_CORNER_RADIUS, "图标圆角", "dp", summary = "重启桌面生效")

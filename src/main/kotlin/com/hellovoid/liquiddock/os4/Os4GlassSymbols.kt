@@ -193,6 +193,9 @@ internal object Os4GlassSymbols {
         val workstationPageFieldTargets: String = "",
         val folderLayoutSyncTargets: String = "",
         val widgetCornerTarget: String = "",
+        val folderBlurTarget: String = "",
+        val shortcutBlurTargets: String = "",
+        val wsAllAppsBlurTarget: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -330,6 +333,25 @@ internal object Os4GlassSymbols {
             mini,
             "RoundedCornerEnforcementUtils.computeEnforcedRadius",
         )
+        val folderBlurTarget = fromMiniElfSingle(
+            mini,
+            "FolderClingBlurController._setFolderClingBlur",
+        )
+        val shortcutBlurTargets = fromMiniElfSymbolList(
+            mini,
+            listOf(
+                "BlurLayerParams.getShortcutShowParams",
+                "BlurUtilities.getShortcutMenuBlurRadiusPx",
+            ),
+        )
+        val wsAllAppsBlurTarget = fromMiniElfSymbolList(
+            mini,
+            listOf(
+                "LaptopAllAppsBlurBackground.build",
+                "BlurUtilities.fastBlurWhenEnterOrExitAllApps",
+                "BlurUtilities.fastBlur",
+            ),
+        )
         return ResolvedTargets(
             glass,
             layoutTargets,
@@ -363,6 +385,9 @@ internal object Os4GlassSymbols {
             workstationPageFieldTargets,
             folderLayoutSyncTargets,
             widgetCornerTarget,
+            folderBlurTarget,
+            shortcutBlurTargets,
+            wsAllAppsBlurTarget,
         )
     }
 

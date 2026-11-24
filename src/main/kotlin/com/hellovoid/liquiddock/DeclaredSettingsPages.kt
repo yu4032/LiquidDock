@@ -107,6 +107,10 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     ))
     page(Page.Recents, text(R.string.recents_header_summary), listOf(
         row(recentsBlurSpec),
+        row(folderBlurSpec),
+        row(allAppsBlurSpec),
+        row(wsAllAppsBlurSpec),
+        row(shortcutBlurSpec),
     ))
     page(Page.AnimationSystem, "控制通知与控制中心顶部模糊及系统界面联动。", listOf(
         toggle(ConfigSchema.Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR,

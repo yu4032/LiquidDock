@@ -326,22 +326,65 @@ static void ld_install_os4_recents_blur(const struct native_api *api, const ld_l
 {
     if (g_recents_blur_installed || g_recents_blur_attempted) return;
     g_recents_blur_attempted = true;
-    __atomic_store_n(&g_os4_allapps_blur_percent, (uint32_t)g_home_options.allapps_blur_percent, __ATOMIC_RELEASE);
-    int percent = g_home_options.recents_blur_percent;
-    if (percent < 0 || percent > 100) percent = 100;
-    __atomic_store_n(&g_os4_recents_blur_percent, (uint32_t)percent, __ATOMIC_RELEASE);
-    if (percent == 100) return;
-    if (!g_home_options.recents_blur_target_present || g_home_options.recents_blur_target_count == 0) {
-        ld_blog("OS4 Recents blur gate unavailable: recents_blur_target was not published");
-        return;
-    }
-    ld_install_os4_recents_blur_one(api, lib,
-            g_home_options.recents_blur_vaddr[0], g_home_options.recents_blur_size[0],
-            (void *)repl_os4_recents_blur_radius, &g_orig_recents_blur_radius, "blur gate");
-    if (g_home_options.recents_blur_target_count >= 2) {
+    int r_pct = g_home_options.recents_blur_percent;
+    if (r_pct < 0 || r_pct > 100) r_pct = 100;
+    int a_pct = g_home_options.allapps_blur_percent;
+    if (a_pct < 0 || a_pct > 100) a_pct = 100;
+    int wa_pct = g_home_options.ws_allapps_blur_percent;
+    if (wa_pct < 0 || wa_pct > 100) wa_pct = 100;
+    int f_pct = g_home_options.folder_blur_percent;
+    if (f_pct < 0 || f_pct > 100) f_pct = 100;
+    int s_pct = g_home_options.shortcut_blur_percent;
+    if (s_pct < 0 || s_pct > 100) s_pct = 100;
+    __atomic_store_n(&g_os4_recents_blur_percent, (uint32_t)r_pct, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_allapps_blur_percent, (uint32_t)a_pct, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_ws_allapps_blur_percent, (uint32_t)wa_pct, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_folder_blur_percent, (uint32_t)f_pct, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_shortcut_blur_percent, (uint32_t)s_pct, __ATOMIC_RELEASE);
+    if (g_home_options.recents_blur_target_present && g_home_options.recents_blur_target_count > 0) {
         ld_install_os4_recents_blur_one(api, lib,
-                g_home_options.recents_blur_vaddr[1], g_home_options.recents_blur_size[1],
-                (void *)repl_os4_recents_home_hold, &g_orig_recents_home_hold, "home-hold gate");
+                g_home_options.recents_blur_vaddr[0], g_home_options.recents_blur_size[0],
+                (void *)repl_os4_recents_blur_radius, &g_orig_recents_blur_radius, "blur gate");
+        if (g_home_options.recents_blur_target_count >= 2) {
+            ld_install_os4_recents_blur_one(api, lib,
+                    g_home_options.recents_blur_vaddr[1], g_home_options.recents_blur_size[1],
+                    (void *)repl_os4_recents_home_hold, &g_orig_recents_home_hold, "home-hold gate");
+        }
+    }
+    if (g_home_options.allapps_blur_vaddr) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.allapps_blur_vaddr, g_home_options.allapps_blur_size,
+                (void *)repl_os4_allapps_blur_radius, &g_orig_allapps_blur_radius, "allapps blur gate");
+    }
+    if (g_home_options.ws_allapps_blur_target_count >= 1) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.ws_allapps_blur_vaddr[0], g_home_options.ws_allapps_blur_size[0],
+                (void *)repl_os4_ws_allapps_blur_build, &g_orig_ws_allapps_blur_build, "ws allapps blur gate");
+    }
+    if (g_home_options.ws_allapps_blur_target_count >= 2) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.ws_allapps_blur_vaddr[1], g_home_options.ws_allapps_blur_size[1],
+                (void *)repl_os4_ws_allapps_fast_blur, &g_orig_ws_allapps_fast_blur, "ws allapps fast blur gate");
+    }
+    if (g_home_options.ws_allapps_blur_target_count >= 3) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.ws_allapps_blur_vaddr[2], g_home_options.ws_allapps_blur_size[2],
+                (void *)repl_os4_ws_fast_blur, &g_orig_ws_fast_blur, "ws fast blur gate");
+    }
+    if (g_home_options.folder_blur_vaddr) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.folder_blur_vaddr, g_home_options.folder_blur_size,
+                (void *)repl_os4_folder_blur_radius, &g_orig_folder_blur_radius, "folder blur gate");
+    }
+    if (g_home_options.shortcut_blur_target_count >= 1) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.shortcut_blur_vaddr[0], g_home_options.shortcut_blur_size[0],
+                (void *)repl_os4_shortcut_blur_params, &g_orig_shortcut_blur_params, "shortcut params blur gate");
+    }
+    if (g_home_options.shortcut_blur_target_count >= 2) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.shortcut_blur_vaddr[1], g_home_options.shortcut_blur_size[1],
+                (void *)repl_os4_shortcut_blur_radius, &g_orig_shortcut_blur_radius, "shortcut radius blur gate");
     }
 }
 
@@ -1987,6 +2030,10 @@ static void install_grid_hook(const struct native_api *api) {
             || g_home_options.folder_grid_cols > 0 || g_home_options.folder_grid_rows > 0
             || g_home_options.dock.enabled || g_home_options.glass_enabled
             || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100
+            || g_home_options.allapps_blur_percent != 100
+            || g_home_options.ws_allapps_blur_percent != 100
+            || g_home_options.folder_blur_percent != 100
+            || g_home_options.shortcut_blur_percent != 100
             || ld_hm_has_any_offsets()))
         install_grid_hook_unlocked(api);
     if (app_loaded) ld_write_hook_status();

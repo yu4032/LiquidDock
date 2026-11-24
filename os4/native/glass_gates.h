@@ -23,6 +23,15 @@ static volatile uint32_t g_os4_recents_blur_percent __attribute__((used)) = 100;
 static void *g_orig_recents_blur_radius __attribute__((used));
 static volatile uint32_t g_os4_allapps_blur_percent __attribute__((used)) = 100;
 static void *g_orig_allapps_blur_radius __attribute__((used));
+static volatile uint32_t g_os4_ws_allapps_blur_percent __attribute__((used)) = 100;
+static void *g_orig_ws_allapps_blur_build __attribute__((used));
+static void *g_orig_ws_allapps_fast_blur __attribute__((used));
+static void *g_orig_ws_fast_blur __attribute__((used));
+static volatile uint32_t g_os4_folder_blur_percent __attribute__((used)) = 100;
+static void *g_orig_folder_blur_radius __attribute__((used));
+static volatile uint32_t g_os4_shortcut_blur_percent __attribute__((used)) = 100;
+static void *g_orig_shortcut_blur_params __attribute__((used));
+static void *g_orig_shortcut_blur_radius __attribute__((used));
 static void *g_orig_widget_enforced_radius __attribute__((used));
 static volatile double g_widget_enforced_radius_override __attribute__((used));
 
@@ -59,6 +68,183 @@ __attribute__((used,naked)) static void repl_os4_allapps_blur_radius(void)
         "add x16, x16, :lo12:g_orig_allapps_blur_radius\n"
         "ldr x16, [x16]\n"
         "br x16\n"
+    );
+}
+
+/* LaptopAllAppsBlurBackground.build returns Obx whose closure context[0] holds
+ * boxed Double(dpr), which is ONLY multiplied by 26.0 * progress for blurRadiusPx. */
+__attribute__((used,naked)) static void repl_os4_ws_allapps_blur_build(void)
+{
+    __asm__ volatile(
+        "stp x29, x30, [x15, #-0x10]!\n"
+        "mov x29, x15\n"
+        "adrp x16, g_orig_ws_allapps_blur_build\n"
+        "add x16, x16, :lo12:g_orig_ws_allapps_blur_build\n"
+        "ldr x16, [x16]\n"
+        "cbz x16, 2f\n"
+        "blr x16\n"
+        "cbz x0, 2f\n"
+        "adrp x9, g_os4_ws_allapps_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_ws_allapps_blur_percent\n"
+        "ldar w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 2f\n"
+        "ldur w10, [x0, #0xb]\n"
+        "add x10, x10, x28, lsl #32\n"
+        "tbz w10, #0, 2f\n"
+        "ldur w11, [x10, #0x17]\n"
+        "add x11, x11, x28, lsl #32\n"
+        "tbz w11, #0, 2f\n"
+        "ldur w12, [x11, #0xf]\n"
+        "add x12, x12, x28, lsl #32\n"
+        "tbz w12, #0, 2f\n"
+        "ldur d0, [x12, #7]\n"
+        "cbnz w9, 1f\n"
+        "movz x13, #0x3f40, lsl #48\n"
+        "fmov d0, x13\n"
+        "b 3f\n"
+        "1: ucvtf d1, w9\n"
+        "mov w13, #100\n"
+        "ucvtf d2, w13\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "3: stur d0, [x12, #7]\n"
+        "2: mov x15, x29\n"
+        "ldp x29, x30, [x15], #0x10\n"
+        "ret\n"
+    );
+}
+
+/* BlurUtilities.fastBlurWhenEnterOrExitAllApps takes progress (0..1) in d0 and
+ * drives window-level system blur (BlurUtils.setBackgroundBlurRadius). */
+__attribute__((used,naked)) static void repl_os4_ws_allapps_fast_blur(void)
+{
+    __asm__ volatile(
+        "adrp x9, g_ws_is_laptop_mode\n"
+        "add x9, x9, :lo12:g_ws_is_laptop_mode\n"
+        "ldar w10, [x9]\n"
+        "cbz w10, 2f\n"
+        "adrp x9, g_os4_ws_allapps_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_ws_allapps_blur_percent\n"
+        "b 3f\n"
+        "2: adrp x9, g_os4_allapps_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_allapps_blur_percent\n"
+        "3: ldar w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 1f\n"
+        "ucvtf d1, w9\n"
+        "mov w10, #100\n"
+        "ucvtf d2, w10\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "1: adrp x16, g_orig_ws_allapps_fast_blur\n"
+        "add x16, x16, :lo12:g_orig_ws_allapps_fast_blur\n"
+        "ldr x16, [x16]\n"
+        "br x16\n"
+    );
+}
+
+/* BlurUtilities.fastBlur takes ratio (0..1) in d0 and sets SurfaceFlinger
+ * window backgroundBlurRadius (used by Workstation AllApps via LaptopGetXController). */
+__attribute__((used,naked)) static void repl_os4_ws_fast_blur(void)
+{
+    __asm__ volatile(
+        "adrp x9, g_ws_is_laptop_mode\n"
+        "add x9, x9, :lo12:g_ws_is_laptop_mode\n"
+        "ldar w10, [x9]\n"
+        "cbz w10, 1f\n"
+        "adrp x9, g_os4_ws_allapps_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_ws_allapps_blur_percent\n"
+        "ldar w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 1f\n"
+        "ucvtf d1, w9\n"
+        "mov w10, #100\n"
+        "ucvtf d2, w10\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "1: adrp x16, g_orig_ws_fast_blur\n"
+        "add x16, x16, :lo12:g_orig_ws_fast_blur\n"
+        "ldr x16, [x16]\n"
+        "br x16\n"
+    );
+}
+
+/* FolderClingBlurController._setFolderClingBlur takes progress (0..1) in d0. */
+__attribute__((used,naked)) static void repl_os4_folder_blur_radius(void)
+{
+    __asm__ volatile(
+        "adrp x9, g_os4_folder_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_folder_blur_percent\n"
+        "ldar w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 1f\n"
+        "ucvtf d1, w9\n"
+        "mov w10, #100\n"
+        "ucvtf d2, w10\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "1: adrp x16, g_orig_folder_blur_radius\n"
+        "add x16, x16, :lo12:g_orig_folder_blur_radius\n"
+        "ldr x16, [x16]\n"
+        "br x16\n"
+    );
+}
+
+/* BlurLayerParams.getShortcutShowParams returns BlurLayerParams* in x0 with blurRadius at [x0, #7]. */
+__attribute__((used,naked)) static void repl_os4_shortcut_blur_params(void)
+{
+    __asm__ volatile(
+        "stp x29, x30, [x15, #-0x10]!\n"
+        "mov x29, x15\n"
+        "adrp x16, g_orig_shortcut_blur_params\n"
+        "add x16, x16, :lo12:g_orig_shortcut_blur_params\n"
+        "ldr x16, [x16]\n"
+        "cbz x16, 2f\n"
+        "blr x16\n"
+        "cbz x0, 2f\n"
+        "adrp x9, g_os4_shortcut_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_shortcut_blur_percent\n"
+        "ldar w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 2f\n"
+        "ldur d0, [x0, #7]\n"
+        "ucvtf d1, w9\n"
+        "mov w10, #100\n"
+        "ucvtf d2, w10\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "stur d0, [x0, #7]\n"
+        "2: mov x15, x29\n"
+        "ldp x29, x30, [x15], #0x10\n"
+        "ret\n"
+    );
+}
+
+/* BlurUtilities.getShortcutMenuBlurRadiusPx returns double blurRadius in d0. */
+__attribute__((used,naked)) static void repl_os4_shortcut_blur_radius(void)
+{
+    __asm__ volatile(
+        "stp x29, x30, [x15, #-0x10]!\n"
+        "mov x29, x15\n"
+        "adrp x16, g_orig_shortcut_blur_radius\n"
+        "add x16, x16, :lo12:g_orig_shortcut_blur_radius\n"
+        "ldr x16, [x16]\n"
+        "cbz x16, 1f\n"
+        "blr x16\n"
+        "1: adrp x9, g_os4_shortcut_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_shortcut_blur_percent\n"
+        "ldar w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 2f\n"
+        "ucvtf d1, w9\n"
+        "mov w10, #100\n"
+        "ucvtf d2, w10\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "2: mov x15, x29\n"
+        "ldp x29, x30, [x15], #0x10\n"
+        "ret\n"
     );
 }
 static void *g_orig_recents_home_hold __attribute__((used));

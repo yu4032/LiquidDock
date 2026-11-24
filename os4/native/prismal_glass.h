@@ -474,6 +474,21 @@ static void ld_prismal_maybe_reload(void)
 #endif
 #ifdef LD_OS4_GLASS_GATES_H
             g_widget_enforced_radius_override = conf.prismal.widget_corner > 0.0 ? conf.prismal.widget_corner : 0.0;
+            __atomic_store_n(&g_os4_recents_blur_percent,
+                    (uint32_t)(conf.recents_blur_percent >= 0 && conf.recents_blur_percent <= 100 ? conf.recents_blur_percent : 100),
+                    __ATOMIC_RELEASE);
+            __atomic_store_n(&g_os4_allapps_blur_percent,
+                    (uint32_t)(conf.allapps_blur_percent >= 0 && conf.allapps_blur_percent <= 100 ? conf.allapps_blur_percent : 100),
+                    __ATOMIC_RELEASE);
+            __atomic_store_n(&g_os4_ws_allapps_blur_percent,
+                    (uint32_t)(conf.ws_allapps_blur_percent >= 0 && conf.ws_allapps_blur_percent <= 100 ? conf.ws_allapps_blur_percent : 100),
+                    __ATOMIC_RELEASE);
+            __atomic_store_n(&g_os4_folder_blur_percent,
+                    (uint32_t)(conf.folder_blur_percent >= 0 && conf.folder_blur_percent <= 100 ? conf.folder_blur_percent : 100),
+                    __ATOMIC_RELEASE);
+            __atomic_store_n(&g_os4_shortcut_blur_percent,
+                    (uint32_t)(conf.shortcut_blur_percent >= 0 && conf.shortcut_blur_percent <= 100 ? conf.shortcut_blur_percent : 100),
+                    __ATOMIC_RELEASE);
 #endif
             last_mtime = st.st_mtime;
             last_mtimensec = st.st_mtim.tv_nsec;

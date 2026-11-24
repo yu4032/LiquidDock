@@ -254,6 +254,15 @@ object Os4ConfigSync {
                     if (resolvedTargets.widgetCornerTarget.isNotEmpty()) {
                         append("widget_corner_target=").append(resolvedTargets.widgetCornerTarget).append('\n')
                     }
+                    if (resolvedTargets.folderBlurTarget.isNotEmpty()) {
+                        append("folder_blur_target=").append(resolvedTargets.folderBlurTarget).append('\n')
+                    }
+                    if (resolvedTargets.shortcutBlurTargets.isNotEmpty()) {
+                        append("shortcut_blur_targets=").append(resolvedTargets.shortcutBlurTargets).append('\n')
+                    }
+                    if (resolvedTargets.wsAllAppsBlurTarget.isNotEmpty()) {
+                        append("ws_allapps_blur_target=").append(resolvedTargets.wsAllAppsBlurTarget).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }

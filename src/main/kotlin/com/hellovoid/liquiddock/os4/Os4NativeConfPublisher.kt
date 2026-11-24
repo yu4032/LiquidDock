@@ -52,6 +52,9 @@ object Os4NativeConfPublisher {
                 !options.glassIconCorner.isFinite() || options.glassIconCorner !in 0.0..128.0)) return null
         if (options.recentsBlurPercent !in 0..100) return null
         if (options.allAppsBlurPercent !in 0..100) return null
+        if (options.wsAllAppsBlurPercent !in 0..100) return null
+        if (options.folderBlurPercent !in 0..100) return null
+        if (options.shortcutBlurPercent !in 0..100) return null
         if (options.workstation.dockCustomization && !options.workstation.isValid()) return null
         return buildString {
             append("hook_safety_enabled=").append(if (options.hookSafetyEnabled) 1 else 0).append('\n')
@@ -161,6 +164,15 @@ object Os4NativeConfPublisher {
             }
             if (options.allAppsBlurPercent != 100) {
                 append("allapps_blur_percent=").append(options.allAppsBlurPercent).append('\n')
+            }
+            if (options.wsAllAppsBlurPercent != 100) {
+                append("ws_allapps_blur_percent=").append(options.wsAllAppsBlurPercent).append('\n')
+            }
+            if (options.folderBlurPercent != 100) {
+                append("folder_blur_percent=").append(options.folderBlurPercent).append('\n')
+            }
+            if (options.shortcutBlurPercent != 100) {
+                append("shortcut_blur_percent=").append(options.shortcutBlurPercent).append('\n')
             }
             if (options.workstation.dockCustomization) {
                 val ws = options.workstation

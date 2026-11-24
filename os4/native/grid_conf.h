@@ -216,6 +216,17 @@ struct ld_grid_conf {
     int allapps_blur_percent;
     uint64_t allapps_blur_vaddr;
     size_t allapps_blur_size;
+    int ws_allapps_blur_percent;
+    size_t ws_allapps_blur_target_count;
+    uint64_t ws_allapps_blur_vaddr[3];
+    size_t ws_allapps_blur_size[3];
+    int folder_blur_percent;
+    uint64_t folder_blur_vaddr;
+    size_t folder_blur_size;
+    int shortcut_blur_percent;
+    size_t shortcut_blur_target_count;
+    uint64_t shortcut_blur_vaddr[2];
+    size_t shortcut_blur_size[2];
     int layout_targets_present;
     uint64_t layout_vaddr[2];
     size_t layout_size[2];
@@ -593,6 +604,9 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
     c.icon_size_percent = 100;
     c.recents_blur_percent = 100;
     c.allapps_blur_percent = 100;
+    c.ws_allapps_blur_percent = 100;
+    c.folder_blur_percent = 100;
+    c.shortcut_blur_percent = 100;
     ld_prismal_options_defaults(&c.prismal);
     uint64_t prismal_seen[2] = {0, 0};
     int soft_glass_seen = 0;
@@ -702,6 +716,40 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     uint64_t va=0; size_t sz=0;
                     if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
                         c.allapps_blur_vaddr=va; c.allapps_blur_size=sz;
+                    }
+                } else if (strcmp(key, "ws_allapps_blur_percent") == 0) {
+                    int value;
+                    if (!ld_grid_parse_int(val, 0, 100, &value)) {
+                        bad=1; break;
+                    }
+                    c.ws_allapps_blur_percent=value;
+                } else if (strcmp(key, "ws_allapps_blur_target") == 0) {
+                    size_t n = 1;
+                    for (const char *p = val; *p; p++) if (*p == ',') n++;
+                    if (n <= 3 && ld_grid_parse_aot_targets(val, c.ws_allapps_blur_vaddr, c.ws_allapps_blur_size, n)) {
+                        c.ws_allapps_blur_target_count=n;
+                    }
+                } else if (strcmp(key, "folder_blur_percent") == 0) {
+                    int value;
+                    if (!ld_grid_parse_int(val, 0, 100, &value)) {
+                        bad=1; break;
+                    }
+                    c.folder_blur_percent=value;
+                } else if (strcmp(key, "folder_blur_target") == 0) {
+                    uint64_t va=0; size_t sz=0;
+                    if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
+                        c.folder_blur_vaddr=va; c.folder_blur_size=sz;
+                    }
+                } else if (strcmp(key, "shortcut_blur_percent") == 0) {
+                    int value;
+                    if (!ld_grid_parse_int(val, 0, 100, &value)) {
+                        bad=1; break;
+                    }
+                    c.shortcut_blur_percent=value;
+                } else if (strcmp(key, "shortcut_blur_targets") == 0) {
+                    size_t n = strchr(val, ',') ? 2 : 1;
+                    if (ld_grid_parse_aot_targets(val, c.shortcut_blur_vaddr, c.shortcut_blur_size, n)) {
+                        c.shortcut_blur_target_count=n;
                     }
                 } else if (strcmp(key, "recents_blur_target") == 0) {
                     size_t n = strchr(val, ',') ? 2 : 1;
