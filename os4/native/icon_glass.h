@@ -292,34 +292,14 @@ static int ld_icon_refresh_cached_rx(struct ld_dart_context *c)
 
 __attribute__((used)) static void ld_icon_record_dock_size(struct ld_dart_context *c)
 {
-    static volatile int s_in_refresh = 0;
-    static double s_bounce_prev = 0.0;
-    static uint64_t s_bounce_until_ns = 0;
-
     double d = 0.0;
     memcpy(&d, c->q[0], sizeof d);
     if (!(d > 1.0 && d < 256.0 && isfinite(d))) return;
-
-    struct timespec ts;
-    uint64_t now_ns = 0;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
-        now_ns = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
-    }
-    if (__atomic_load_n(&s_in_refresh, __ATOMIC_RELAXED)) return;
-    if (now_ns < s_bounce_until_ns && fabs(d - s_bounce_prev) < 1.0) return;
-
-    double prev_d = ld_icon_get_dock_size();
+    /* Only record the dock icon size. Do NOT call back into Dart (g_getstream_add_rt)
+     * from inside LD_DART_OBSERVER: Dart code can trim/zero CSP pages or trigger GC,
+     * corrupting callee-saved registers and retained Rx heap pointers. */
     ld_icon_store_dock_size(d);
-    if (!g_getstream_add_rt || !(prev_d > 1.0) || fabs(d - prev_d) <= 0.5) return;
-
-    s_bounce_prev = prev_d;
-    s_bounce_until_ns = now_ns + 250000000ULL;
-    __atomic_store_n(&s_in_refresh, 1, __ATOMIC_RELAXED);
-    int refreshed = ld_icon_refresh_cached_rx(c);
-    __atomic_store_n(&s_in_refresh, 0, __ATOMIC_RELAXED);
-    if (refreshed > 0) {
-        ld_blog("icon glass dock refresh %.1f -> %.1f count=%d", prev_d, d, refreshed);
-    }
+    (void)ld_icon_refresh_cached_rx;
 }
 
 /* Owner class of the workspace icon host. Known IDs serve as fallback while

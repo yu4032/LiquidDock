@@ -472,6 +472,9 @@ static void ld_prismal_maybe_reload(void)
             g_ld_gse_large_folder_2x1_corner = (float)conf.large_folder_2x1_corner;
             g_ld_gse_widget_corner = (float)conf.prismal.widget_corner;
 #endif
+#ifdef LD_OS4_GLASS_GATES_H
+            g_widget_enforced_radius_override = conf.prismal.widget_corner > 0.0 ? conf.prismal.widget_corner : 0.0;
+#endif
             last_mtime = st.st_mtime;
             last_mtimensec = st.st_mtim.tv_nsec;
             last_size = st.st_size;
@@ -492,6 +495,18 @@ static inline void ld_sp_add_shared(uint8_t *ctrl)
 {
     if (ctrl) {
         __atomic_fetch_add((int64_t *)(ctrl + 8), 1, __ATOMIC_RELAXED);
+    }
+}
+
+static inline void ld_sp_release_shared(uint8_t *ctrl)
+{
+    if (!ctrl) return;
+    if (__atomic_fetch_sub((int64_t *)(ctrl + 8), 1, __ATOMIC_ACQ_REL) == 0) {
+        void **vt = *(void ***)ctrl;
+        ((void (*)(void *))vt[2])(ctrl);
+        if (__atomic_fetch_sub((int64_t *)(ctrl + 16), 1, __ATOMIC_ACQ_REL) == 0) {
+            ((void (*)(void *))vt[4])(ctrl);
+        }
     }
 }
 
@@ -534,21 +549,39 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     float min_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fminf(eff_gx, eff_gy) : 100.0f;
     float max_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fmaxf(eff_gx, eff_gy) : 100.0f;
     int is_dock = 0;
+    int is_widget_tls = 0;
 #ifdef LD_GLASS_SUPERELLIPSE_H
     is_dock = g_ld_gse_tls_is_dock;
+    is_widget_tls = g_ld_gse_tls_is_widget;
 #endif
     /* Preserve stock full-circle / capsule widgets (e.g. 2x2 circular clock widget) and Dock. */
     int is_circular = (gz >= min_glass_dim * 0.45f);
     if (!is_circular && !is_dock) {
-    if (min_glass_dim >= 360.0f && max_glass_dim <= 2000.0f && (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f) {
-        int is_large_folder = (gz > 15.2f * d) ||
-                              (fabsf(eff_gx - eff_gy) < 12.0f && fabsf(eff_gx - 169.7f * d) < 22.0f * d);
+    if (is_widget_tls) {
+        if (opt->widget_corner > 0.0) {
+            float cr_px = fminf((float)opt->widget_corner * d, min_glass_dim * 0.5f);
+            ld_write_f32(ubo, 0x18u, cr_px);
+        }
+    } else if (min_glass_dim >= 360.0f && max_glass_dim <= 2000.0f && (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f) {
+        int is_2x2_folder_size = (fabsf(eff_gx - eff_gy) < 12.0f && fabsf(eff_gx - 169.7f * d) < 22.0f * d);
+        int is_pre_overridden_widget = (opt->widget_corner > 0.0 && !is_2x2_folder_size &&
+                                        fabsf(gz - (float)opt->widget_corner * d) < 1.5f * d);
+        int is_large_folder = !is_pre_overridden_widget &&
+                              ((gz > 15.2f * d) || is_2x2_folder_size);
         if (is_large_folder) {
             if (opt->large_folder_corner > 0.0) {
                 float cr_px = fminf((float)opt->large_folder_corner * d, min_glass_dim * 0.5f);
                 ld_write_f32(ubo, 0x18u, cr_px);
             }
         } else if (opt->widget_corner > 0.0) {
+            float cr_px = fminf((float)opt->widget_corner * d, min_glass_dim * 0.5f);
+            ld_write_f32(ubo, 0x18u, cr_px);
+        }
+    } else if (min_glass_dim >= 68.0f * d && max_glass_dim >= 115.0f * d && max_glass_dim <= 2000.0f &&
+               (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f &&
+               gz <= 15.2f * d) {
+        /* 2x1 widgets and scaled-down 2x2 widgets during animations (scale < 1.0). */
+        if (opt->widget_corner > 0.0) {
             float cr_px = fminf((float)opt->widget_corner * d, min_glass_dim * 0.5f);
             ld_write_f32(ubo, 0x18u, cr_px);
         }
@@ -760,12 +793,61 @@ __attribute__((naked)) static void repl_canvas_savelayer(void)
     );
 }
 
+static __thread ld_sp_t g_tls_cached_wp_tex;
+static __thread int g_tls_in_glass_acquire;
+
+__attribute__((used)) static int ld_compose_should_upscale(void)
+{
+    return g_tls_in_glass_acquire &&
+           __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED) &&
+           !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED);
+}
+
+__attribute__((used)) static const ld_sp_t *ld_compose_resolve_wp(const ld_sp_t *snap, const ld_sp_t *wp)
+{
+    if (wp && wp->ptr) {
+        if (wp->ptr != g_tls_cached_wp_tex.ptr) {
+            ld_sp_t old = g_tls_cached_wp_tex;
+            g_tls_cached_wp_tex = *wp;
+            ld_sp_add_shared(g_tls_cached_wp_tex.ctrl);
+            ld_sp_release_shared(old.ctrl);
+        }
+        return wp;
+    }
+    if (snap && snap->ptr && g_tls_cached_wp_tex.ptr) {
+        return &g_tls_cached_wp_tex;
+    }
+    return wp;
+}
+
 __attribute__((naked)) static void repl_compose_textures(void)
 {
     __asm__ volatile(
-        "adrp x16, g_prismal_no_downsample\n"
-        "ldr w17, [x16, :lo12:g_prismal_no_downsample]\n"
-        "cbz w17, 1f\n"
+        "stp x29, x30, [sp, #-0x80]!\n"
+        "mov x29, sp\n"
+        "stp x0, x1, [sp, #0x10]\n"
+        "stp x2, x3, [sp, #0x20]\n"
+        "stp x4, x5, [sp, #0x30]\n"
+        "stp x6, x7, [sp, #0x40]\n"
+        "str x8, [sp, #0x50]\n"
+        "stp s0, s1, [sp, #0x58]\n"
+        "mov x0, x1\n"
+        "mov x1, x2\n"
+        "bl ld_compose_resolve_wp\n"
+        "mov x9, x0\n"
+        "str x9, [sp, #0x60]\n"
+        "bl ld_compose_should_upscale\n"
+        "mov w10, w0\n"
+        "ldr x9, [sp, #0x60]\n"
+        "ldp x0, x1, [sp, #0x10]\n"
+        "ldp x2, x3, [sp, #0x20]\n"
+        "ldp x4, x5, [sp, #0x30]\n"
+        "ldp x6, x7, [sp, #0x40]\n"
+        "ldr x8, [sp, #0x50]\n"
+        "ldp s0, s1, [sp, #0x58]\n"
+        "ldp x29, x30, [sp], #0x80\n"
+        "mov x2, x9\n"
+        "cbz w10, 1f\n"
         "fmov s0, #1.00000000\n"
         "1:\n"
         "adrp x16, g_orig_compose_textures\n"
@@ -784,6 +866,7 @@ static void repl_make_base_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_tex
         return;
     }
     if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
+        !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) &&
         scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
@@ -799,6 +882,7 @@ static void repl_make_reflect_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_
         return;
     }
     if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
+        !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) &&
         scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
@@ -854,25 +938,31 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
                                orig_geo[0] > 8.0f && orig_geo[1] > 8.0f &&
                                fmaxf(orig_geo[0], orig_geo[1]) < 115.0f * d &&
                                fabsf(orig_geo[0] - orig_geo[1]) < 16.0f * d);
-        if (g_tls_is_small_icon && entity) {
+        if (entity) {
             float m[16];
             memcpy(m, entity, sizeof m);
             if (isfinite(m[12]) && isfinite(m[13]) && fabsf(m[15] - 1.0f) < 0.05f) {
                 g_tls_entity_tx = m[12];
                 g_tls_entity_ty = m[13];
-                float sx = sqrtf(m[0] * m[0] + m[1] * m[1]);
-                float sy = sqrtf(m[4] * m[4] + m[5] * m[5]);
-                float sc = fminf(sx, sy);
-                g_tls_icon_scale = (isfinite(sc) && sc > 0.1f && sc < 4.0f) ? sc : 1.0f;
+                if (g_tls_is_small_icon) {
+                    float sx = sqrtf(m[0] * m[0] + m[1] * m[1]);
+                    float sy = sqrtf(m[4] * m[4] + m[5] * m[5]);
+                    float sc = fminf(sx, sy);
+                    g_tls_icon_scale = (isfinite(sc) && sc > 0.1f && sc < 4.0f) ? sc : 1.0f;
+                } else {
+                    g_tls_icon_scale = 1.0f;
+                }
             } else {
                 g_tls_icon_scale = 1.0f;
             }
-            float alt_w = 0.0f;
-            memcpy(&alt_w, (const uint8_t *)self + 0x1e0u, sizeof alt_w);
-            if (isfinite(alt_w) && alt_w > 10.0f && alt_w < 200.0f) {
-                float geo_sc = orig_geo[0] / (alt_w * d);
-                if (isfinite(geo_sc) && geo_sc > 0.1f && geo_sc < g_tls_icon_scale) {
-                    g_tls_icon_scale = geo_sc;
+            if (g_tls_is_small_icon) {
+                float alt_w = 0.0f;
+                memcpy(&alt_w, (const uint8_t *)self + 0x1e0u, sizeof alt_w);
+                if (isfinite(alt_w) && alt_w > 10.0f && alt_w < 200.0f) {
+                    float geo_sc = orig_geo[0] / (alt_w * d);
+                    if (isfinite(geo_sc) && geo_sc > 0.1f && geo_sc < g_tls_icon_scale) {
+                        g_tls_icon_scale = geo_sc;
+                    }
                 }
             }
         } else {

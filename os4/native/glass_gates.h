@@ -23,6 +23,24 @@ static volatile uint32_t g_os4_recents_blur_percent __attribute__((used)) = 100;
 static void *g_orig_recents_blur_radius __attribute__((used));
 static volatile uint32_t g_os4_allapps_blur_percent __attribute__((used)) = 100;
 static void *g_orig_allapps_blur_radius __attribute__((used));
+static void *g_orig_widget_enforced_radius __attribute__((used));
+static volatile double g_widget_enforced_radius_override __attribute__((used));
+
+__attribute__((used,naked)) static void repl_widget_enforced_radius(void)
+{
+    __asm__ volatile(
+        "adrp x9, g_widget_enforced_radius_override\n"
+        "add x9, x9, :lo12:g_widget_enforced_radius_override\n"
+        "ldr d0, [x9]\n"
+        "fcmp d0, #0.0\n"
+        "b.le 1f\n"
+        "ret\n"
+        "1: adrp x16, g_orig_widget_enforced_radius\n"
+        "add x16, x16, :lo12:g_orig_widget_enforced_radius\n"
+        "ldr x16, [x16]\n"
+        "br x16\n"
+    );
+}
 
 __attribute__((used,naked)) static void repl_os4_allapps_blur_radius(void)
 {

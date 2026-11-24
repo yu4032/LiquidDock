@@ -47,21 +47,18 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
     if (g_home_options.glass_enabled && g_home_options.native_glass.mask) {
         ld_native_glass_apply((uintptr_t)obj, &g_home_options.native_glass, ld_glass_fast_read, ld_glass_fast_write);
     }
-    if (!from_unwrap &&
-        (g_home_options.prismal.disable_stationary_downsample ||
-         __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED))) {
-        /* Use live 1.0x capture (rate = -1) for Dock, Widgets, Large Folders, and
-         * stationary 1x1 icons (when icon_downsample == 0), so they never hit a
-         * pre-hook 0.25x cached wallpaper entry and Workstation Dock refracts live
-         * content. Fall back to shared cache (rate = 0) for 1x1 icons during motion
-         * or when icon_downsample == 1 to keep 120fps locked with zero icon RT churn. */
+    if (g_home_options.prismal.disable_stationary_downsample ||
+        __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED)) {
+        /* Set pass_blur_rate = -1 in BOTH UnwrapGlassFilter and AcquireGlassBlurTextures
+         * (matching abae314f) so DrawHyperMaterial sees rate = -1 before choosing
+         * the shared pass_blur cache path. Only use shared cache (rate = 0) for 1x1
+         * icons when the user explicitly enables icon_downsample == 1. */
         int is_small_icon = 0;
 #ifdef LD_GLASS_SUPERELLIPSE_H
         is_small_icon = g_ld_gse_tls_is_small_icon;
 #endif
         int downsample_icon = is_small_icon &&
-            (__atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED) ||
-             __atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED));
+            __atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED);
         int32_t rate_i = 0;
         uint8_t *rate_ptr = (uint8_t *)obj + 0x34u;
         memcpy(&rate_i, rate_ptr, sizeof(rate_i));
@@ -104,6 +101,7 @@ static bool ld_acquire_blur_hook(void *canvas, void *filter, void *a2, void *a3,
         float orig_s0 = s0;
         if ((g_home_options.prismal.disable_stationary_downsample ||
              __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE)) &&
+            !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) &&
             s0 > 0.0f && s0 < 1.0f) {
             s0 = 1.0f;
         }
@@ -111,7 +109,11 @@ static bool ld_acquire_blur_hook(void *canvas, void *filter, void *a2, void *a3,
             ld_blog("glass AcquireBlur hook active f=%p s0=%.3f->%.3f", filter, (double)orig_s0, (double)s0);
         }
     }
-    return g_orig_acquire_blur(canvas, filter, a2, a3, a4, a5, w6, s0);
+    int prev_acq = g_tls_in_glass_acquire;
+    g_tls_in_glass_acquire = 1;
+    bool ok = g_orig_acquire_blur(canvas, filter, a2, a3, a4, a5, w6, s0);
+    g_tls_in_glass_acquire = prev_acq;
+    return ok;
 }
 
 static void *ld_unwrap_glass_hook(void *filter, int depth)

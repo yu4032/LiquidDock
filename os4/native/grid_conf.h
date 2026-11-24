@@ -247,6 +247,8 @@ struct ld_grid_conf {
     size_t blur_degrade_size;
     uint64_t blur_better_down_vaddr;
     size_t blur_better_down_size;
+    uint64_t widget_corner_vaddr;
+    size_t widget_corner_size;
     int widget_prevent_stretch_enabled;
     int widget_geometry_targets_present;
     uint64_t widget_geometry_vaddr[3];
@@ -313,6 +315,9 @@ struct ld_grid_conf {
     size_t ws_jump_to_page_size;
     uint64_t ws_page_field_vaddr[4];
     size_t ws_page_field_size[4];
+    int folder_layout_sync_present;
+    uint64_t folder_layout_sync_vaddr[5];
+    size_t folder_layout_sync_size[5];
 };
 
 static volatile int g_ws_is_laptop_mode __attribute__((used));
@@ -831,6 +836,11 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
                         c.blur_better_down_vaddr=va; c.blur_better_down_size=sz;
                     }
+                } else if (strcmp(key, "widget_corner_target") == 0) {
+                    uint64_t va=0; size_t sz=0;
+                    if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
+                        c.widget_corner_vaddr=va; c.widget_corner_size=sz;
+                    }
                 } else if (strcmp(key, "widget_geometry_targets") == 0) {
                     if (ld_grid_parse_aot_targets_max(val, c.widget_geometry_vaddr,
                             c.widget_geometry_size, 3, 65536)) {
@@ -973,6 +983,14 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         bad=1; break;
                     }
                     ws_seen |= 1u << 30;
+                } else if (strcmp(key, "folder_layout_sync_targets") == 0) {
+                    if ((ws_seen & (1u << 31)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.folder_layout_sync_vaddr,
+                                                       c.folder_layout_sync_size, 5, 8192)) {
+                        bad=1; break;
+                    }
+                    c.folder_layout_sync_present = 1;
+                    ws_seen |= 1u << 31;
                 } else if (strcmp(key, "ws_dock_custom") == 0 ||
                            strcmp(key, "ws_taskbar_mode") == 0 ||
                            strcmp(key, "ws_desktop_sync_normal") == 0) {

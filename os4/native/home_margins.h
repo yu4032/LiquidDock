@@ -134,6 +134,8 @@ static volatile int g_hm_cur_dir __attribute__((used)) = -1;
 static volatile int g_hm_cur_cols __attribute__((used));
 static volatile int g_hm_cur_rows __attribute__((used));
 static volatile int g_hm_field_decode_failed __attribute__((used));
+static double g_hm_active_cw __attribute__((used));
+static double g_hm_active_ch __attribute__((used));
 
 static int ld_hm_has_vertical_offsets(void)
 {
@@ -694,6 +696,11 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     __builtin_memcpy(&out_cw, (const void *)(cfg + 0x2b), sizeof out_cw);
     __builtin_memcpy(&out_ch, (const void *)(cfg + 0x33), sizeof out_ch);
     __builtin_memcpy(&out_ind, (const void *)(cfg + 0x4b), sizeof out_ind);
+    if (isfinite(out_cw) && isfinite(out_ch) &&
+        out_cw > 10.0 && out_cw < 2000.0 && out_ch > 10.0 && out_ch < 2000.0) {
+        g_hm_active_cw = out_cw;
+        g_hm_active_ch = out_ch;
+    }
     int out_geometry_valid = isfinite(out_cw) && isfinite(out_ch) && isfinite(out_ind);
     if (box0) {
         uintptr_t out_box = ld_hm_ptr(cfg, 0x3b, x28);
@@ -747,38 +754,26 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     return (void *)cfg;
 }
 
-__attribute__((naked, used)) static void ld_hm_cc_hook(void)
+/* Use the TLS shadow observer (LD_WS_POST_OBSERVER) instead of pushing raw
+ * registers onto the Dart stack (x15). GridController.currentConfig can trigger
+ * Dart Scavenger GC (DRT_AllocateContext -> StackFrame::VisitObjectPointers),
+ * which scans every slot between x15 and x29 as tagged Dart ObjectPtrs. */
+__attribute__((used)) static void ld_hm_cc_post_ws(struct ld_ws_ctx *c)
 {
-    __asm__ volatile(
-        "sub  x15, x15, #64\n"
-        "str  x19, [x15, #0]\n"
-        "add  x16, x15, #64\n"
-        "str  x16, [x15, #8]\n"
-        "str  x30, [x15, #16]\n"
-        "mov  x17, sp\n"
-        "str  x17, [x15, #32]\n"
-        "str  x28, [x15, #40]\n"
-        "str  x27, [x15, #48]\n"
-        "str  x26, [x15, #56]\n"
-        "adrp x17, g_hm_cc_orig\n"
-        "ldr  x17, [x17, :lo12:g_hm_cc_orig]\n"
-        "cbz  x17, 1f\n"
-        "blr  x17\n"
-        "1:\n"
-        "str  x0, [x15, #24]\n"
-        "mov  x19, x15\n"
-        "sub  x17, x15, #1024\n"
-        "and  x17, x17, #0xfffffffffffffff0\n"
-        "mov  sp, x17\n"
-        "mov  x0, x15\n"
-        "bl   ld_hm_cc_post\n"
-        "ldr  x16, [x19, #32]\n"
-        "mov  sp, x16\n"
-        "ldr  x30, [x19, #16]\n"
-        "add  x15, x19, #64\n"
-        "ldr  x19, [x19, #0]\n"
-        "ret\n");
+    if (!c) return;
+    uint64_t f[8] = {
+        0, 0, 0,
+        c->ret_x0,
+        0,
+        c->x[28],
+        c->x[27],
+        c->x[26],
+    };
+    void *res = ld_hm_cc_post((unsigned char *)f);
+    c->ret_x0 = (uint64_t)(uintptr_t)res;
 }
+
+LD_WS_POST_OBSERVER(ld_hm_cc_hook, ld_hm_cc_post_ws, g_hm_cc_orig)
 
 static void ld_home_margins_install(const struct native_api *api, ld_lib_info *lib)
 {

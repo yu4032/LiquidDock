@@ -168,6 +168,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "frb_boundary_adapter.h"
 #include "home_icons.h"
 #include "home_margins.h"
+#include "folder_layout_sync.h"
 #include "safe_mode.h"
 #include "home_indicator.h"
 #include "home_widgets.h"
@@ -680,6 +681,25 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                 }
             }
             g_blur_degrade_hook_installed = true;
+        }
+    }
+    g_widget_enforced_radius_override = g_home_options.prismal.widget_corner > 0.0
+        ? g_home_options.prismal.widget_corner : 0.0;
+    {
+        static bool g_widget_corner_hook_installed = false;
+        if (!g_widget_corner_hook_installed && g_home_options.widget_corner_vaddr) {
+            uintptr_t wc_rt = 0;
+            if (ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.widget_corner_vaddr, &wc_rt) &&
+                executable_range(wc_rt, 16) && *(const uint32_t *)wc_rt == 0xa9bf79fdu) {
+                void *bak = NULL;
+                if (api->hook((void *)wc_rt, (void *)repl_widget_enforced_radius, &bak) == 0 && bak) {
+                    g_orig_widget_enforced_radius = bak;
+                    ld_pin_code_pages_soft(wc_rt, 16);
+                    ld_blog("OS4 widget enforced radius hook installed at %p (override=%.1f)",
+                            (void *)wc_rt, g_widget_enforced_radius_override);
+                }
+            }
+            g_widget_corner_hook_installed = true;
         }
     }
     const char *label[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
@@ -1507,6 +1527,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                                   (float)g_home_options.prismal.widget_corner);
     ld_glass_filter_hook_install(api);
     ld_home_margins_install(api,&lib);
+    ld_folder_layout_sync_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (g_installed) { update_layout_ready(); return; }
 

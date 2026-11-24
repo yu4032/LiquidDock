@@ -95,6 +95,7 @@ static volatile float g_ld_gse_large_folder_2x1_corner;
 static volatile float g_ld_gse_widget_corner;
 static __thread int g_ld_gse_tls_is_small_icon;
 static __thread int g_ld_gse_tls_is_dock;
+static __thread int g_ld_gse_tls_is_widget;
 
 struct ld_gse_cache_entry {
     float w, h, rx, ry, n;
@@ -165,7 +166,7 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     float rad[2] = {0, 0};
     float quad[4] = {0, 0, 0, 0};
     float n_old = -1.0f;
-    int dock = 0, patched = 0;
+    int dock = 0, patched = 0, matched_widget = 0;
     float w = 0, h = 0;
 
     if (canvas) {
@@ -173,16 +174,25 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
         count = *(const uint64_t *)(canvas + 0x140);
         const uint64_t *pages = *(const uint64_t *const *)(canvas + 0x120);
         if (count > 0 && count < 0x100000u && pages) {
-            uint64_t idx = base_idx + count - 1u;
-            uint64_t page = pages[idx >> 4];
-            if (page) {
-                rec = (uint8_t *)page + (unsigned)(idx & 0xfu) * LD_GSE_REC_SIZE;
-                kind = rec[LD_GSE_OFF_KIND];
-                memcpy(rect, rec + LD_GSE_OFF_RECT, sizeof rect);
-                memcpy(rad, rec + LD_GSE_OFF_RADII, sizeof rad);
-                memcpy(quad, rec + LD_GSE_OFF_QUAD, sizeof quad);
-                memcpy(&n_old, rec + LD_GSE_OFF_N, sizeof n_old);
-                dock = ld_gse_rect_is_dock(rect, &w, &h);
+            uint64_t max_walk = count < 4u ? count : 4u;
+            for (uint64_t step = 0; step < max_walk; step++) {
+                uint64_t idx = base_idx + count - 1u - step;
+                uint64_t page = pages[idx >> 4];
+                if (!page) continue;
+                uint8_t *cand = (uint8_t *)page + (unsigned)(idx & 0xfu) * LD_GSE_REC_SIZE;
+                unsigned ckind = cand[LD_GSE_OFF_KIND];
+                float crad[2] = {0, 0};
+                memcpy(crad, cand + LD_GSE_OFF_RADII, sizeof crad);
+                if (step == 0 || (ckind == 1 && (crad[0] > 0.5f || crad[1] > 0.5f))) {
+                    rec = cand;
+                    kind = ckind;
+                    memcpy(rect, rec + LD_GSE_OFF_RECT, sizeof rect);
+                    memcpy(rad, crad, sizeof rad);
+                    memcpy(quad, rec + LD_GSE_OFF_QUAD, sizeof quad);
+                    memcpy(&n_old, rec + LD_GSE_OFF_N, sizeof n_old);
+                    dock = ld_gse_rect_is_dock(rect, &w, &h);
+                    if (ckind == 1 && (crad[0] > 0.5f || crad[1] > 0.5f)) break;
+                }
             }
         }
     }
@@ -216,9 +226,11 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
              * 大文件夹再按短边区分：2x1/1x2/3x1 窄条（min_dim < 120dp）与 2x2 及以上（>= 120dp）。 */
             /* 保留原生圆形/胶囊小组件（如放大到 2x2 的圆形时钟小组件），不覆盖其圆角。 */
             int is_circular = (rad[0] >= min_dim * 0.45f || rad[1] >= min_dim * 0.45f);
-            int is_widget = !dock && !is_circular && min_dim >= 120.0f && max_dim <= 800.0f &&
+            int is_2x2_folder_size = (fabsf(w - h) < 4.0f && fabsf(w - 169.7f) < 12.0f);
+            int is_widget = !dock && !is_circular && min_dim >= 68.0f && max_dim >= 115.0f && max_dim <= 800.0f &&
                             (max_dim / fmaxf(min_dim, 1.0f)) <= 3.2f &&
-                            rad[0] <= 15.2f;
+                            (rad[0] <= 15.2f || (wg_c > 0.0f && fabsf(rad[0] - wg_c) < 0.5f && !is_2x2_folder_size));
+            matched_widget = is_widget;
             int is_large_folder = !dock && !is_circular && !is_widget && min_dim >= 45.0f && max_dim >= 120.0f &&
                                   max_dim <= 800.0f && (max_dim / fmaxf(min_dim, 1.0f)) <= 4.0f &&
                                   rad[0] > 15.2f;
@@ -274,9 +286,11 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
 
     int prev_small_icon = g_ld_gse_tls_is_small_icon;
     int prev_dock = g_ld_gse_tls_is_dock;
+    int prev_widget = g_ld_gse_tls_is_widget;
     float max_d = fmaxf(w, h);
     g_ld_gse_tls_is_small_icon = (rec != NULL && !dock && max_d > 1.0f && max_d < 115.0f);
     g_ld_gse_tls_is_dock = (rec != NULL && dock);
+    g_ld_gse_tls_is_widget = matched_widget;
 
     void *ret = NULL;
     if (g_ld_gse_orig_dhm)
@@ -284,6 +298,7 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
                                                  a4, a5, a6, a7, a8);
     g_ld_gse_tls_is_small_icon = prev_small_icon;
     g_ld_gse_tls_is_dock = prev_dock;
+    g_ld_gse_tls_is_widget = prev_widget;
     (void)patched;
     return ret;
 }

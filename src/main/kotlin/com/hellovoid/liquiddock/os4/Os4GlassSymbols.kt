@@ -191,6 +191,8 @@ internal object Os4GlassSymbols {
         val workstationPageChangedTarget: String = "",
         val workstationJumpToPageTarget: String = "",
         val workstationPageFieldTargets: String = "",
+        val folderLayoutSyncTargets: String = "",
+        val widgetCornerTarget: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -314,6 +316,20 @@ internal object Os4GlassSymbols {
             mini,
             "enablePassBlurBetterDownForView",
         )
+        val folderLayoutSyncTargets = fromMiniElfSymbolList(
+            mini,
+            listOf(
+                "FolderLayoutStrategy.calItemSize",
+                "FolderIconGetxController.putIfAbsent",
+                "FolderIconGetxController.newPaddingHorizontal",
+                "FolderIconGetxController.newPaddingVertical",
+                "FolderLayoutStrategy.getPreviewItemInfo",
+            ),
+        )
+        val widgetCornerTarget = fromMiniElfSingle(
+            mini,
+            "RoundedCornerEnforcementUtils.computeEnforcedRadius",
+        )
         return ResolvedTargets(
             glass,
             layoutTargets,
@@ -345,6 +361,8 @@ internal object Os4GlassSymbols {
             workstationPageChangedTarget,
             workstationJumpToPageTarget,
             workstationPageFieldTargets,
+            folderLayoutSyncTargets,
+            widgetCornerTarget,
         )
     }
 
