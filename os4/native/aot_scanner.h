@@ -252,13 +252,22 @@ static uintptr_t ld_resolve_sym_or_aot(const ld_lib_info *lib, int sym_present,
         if (check_words > 16u) check_words = 16u;
         if (check_words >= 4u &&
             ld_vaddr_to_runtime(lib, (uintptr_t)sym_vaddr, &sym_rt) &&
-            executable_range(sym_rt, check_words * sizeof(uint32_t)) &&
-            ld_aot_match_words((const uint32_t *)sym_rt, words, check_words)) {
-            ld_blog("%s resolved via symbol at %p (vaddr 0x%lx)",
-                    tag ? tag : "target", (void *)sym_rt, (unsigned long)sym_vaddr);
-            return sym_rt;
+            executable_range(sym_rt, check_words * sizeof(uint32_t))) {
+            const uint32_t *live = (const uint32_t *)sym_rt;
+            if (ld_aot_match_words(live, words, check_words)) {
+                ld_blog("%s resolved via symbol at %p (vaddr 0x%lx)",
+                        tag ? tag : "target", (void *)sym_rt, (unsigned long)sym_vaddr);
+                return sym_rt;
+            }
+            if (words[0] == 0xa9bf79fdu && live[0] == 0xa9bf79fdu && live[1] == 0xaa0f03fdu &&
+                ld_hook_site_safe(sym_rt, tag)) {
+                ld_blog("%s resolved via symbol ABI at %p (vaddr 0x%lx)",
+                        tag ? tag : "target", (void *)sym_rt, (unsigned long)sym_vaddr);
+                return sym_rt;
+            }
         }
     }
+    if (sym_present && sym_vaddr) return 0;
     return ld_find_aot_pattern(lib, hint_vaddr, words, word_count);
 }
 
@@ -286,6 +295,7 @@ static uintptr_t ld_resolve_sym_scan_or_aot(const ld_lib_info *lib, int sym_pres
             }
         }
     }
+    if (sym_present && sym_vaddr) return 0;
     return ld_find_aot_pattern(lib, hint_vaddr, words, word_count);
 }
 
@@ -308,6 +318,7 @@ static uintptr_t ld_resolve_sym_prologue_or_aot(const ld_lib_info *lib, int sym_
             }
         }
     }
+    if (sym_present && sym_vaddr) return 0;
     return ld_find_aot_pattern(lib, hint_vaddr, words, word_count);
 }
 

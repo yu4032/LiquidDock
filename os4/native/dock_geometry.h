@@ -126,6 +126,7 @@ static void *g_orig_dock_bottom __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_bottom(struct ld_dart_context *c)
 {
     if(g_home_options.dock.bottom==0 || !ld_dock_active(c)) return;
+    if(g_home_options.phone_dock_glass && !__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
     /* GridController.hotSeatsMarginBottom: d1 is the original absolute inset,
      * d0 is the vendor extra. The replayed fadd consumes both values. Keep
      * the shared grid immutable so workspace row geometry is unaffected. The
@@ -144,6 +145,9 @@ static inline double ld_dock_effective_height_delta(struct ld_dart_context *c)
         return g_home_options.ws.dock_height;
     }
     if (g_home_options.dock.height > 0.0 && ld_dock_active(c)) {
+        if (g_home_options.phone_dock_glass && !__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) {
+            return 0.0;
+        }
         return g_home_options.dock.height;
     }
     return 0.0;

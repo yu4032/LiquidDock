@@ -291,6 +291,8 @@ public final class ConfigSchema {
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SOFT_GLASS_ENABLED = bool(
                 "liquid_soft_glass_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> PHONE_DOCK_GLASS = bool(
+                "phone_dock_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
                 "liquid_wallpaper_flicker_fix", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
@@ -968,6 +970,7 @@ public final class ConfigSchema {
                 Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
                 Glass.BACKLIT_EXTENT);
         add(keys, Glass.ENABLED, Glass.CONTINUOUS_CORNERS, Glass.SOFT_GLASS_ENABLED,
+                Glass.PHONE_DOCK_GLASS,
                 Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,

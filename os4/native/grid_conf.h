@@ -192,6 +192,10 @@ struct ld_grid_conf {
     struct ld_dock_conf dock;
     int glass_enabled;
     int soft_glass_enabled;
+    int phone_dock_glass;
+    int phone_dock_targets_present;
+    uint64_t phone_dock_vaddr[4];
+    size_t phone_dock_size[4];
     struct ld_prismal_options prismal;
     int debug_logging;  /* settings log switch; gates optional diagnostics */
     int glass_icons, glass_widgets, widget_overrides;
@@ -734,6 +738,14 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     for (const char *p = val; *p; p++) if (*p == ',') n++;
                     if (n <= 3 && ld_grid_parse_aot_targets(val, c.ws_allapps_blur_vaddr, c.ws_allapps_blur_size, n)) {
                         c.ws_allapps_blur_target_count=n;
+                    }
+                } else if (strcmp(key, "phone_dock_glass") == 0) {
+                    int value;
+                    if (!ld_grid_parse_bool01(val, &value)) { bad = 1; break; }
+                    c.phone_dock_glass = value;
+                } else if (strcmp(key, "phone_dock_targets") == 0) {
+                    if (ld_grid_parse_aot_targets_max(val, c.phone_dock_vaddr, c.phone_dock_size, 4, 65536)) {
+                        c.phone_dock_targets_present = 1;
                     }
                 } else if (strcmp(key, "folder_blur_percent") == 0) {
                     int value;

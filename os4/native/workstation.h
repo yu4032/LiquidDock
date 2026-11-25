@@ -252,6 +252,49 @@ static inline double ld_ws_device_width(void)
 
 static inline int ld_ws_is_const_ro(uintptr_t addr)
 {
+    static struct {
+        uintptr_t start;
+        uintptr_t end;
+    } s_ro_heap[16];
+    static int s_ro_count = 0;
+    static int s_ro_state = 0; /* 0=uninit, 1=initing, 2=ready */
+
+    int st = __atomic_load_n(&s_ro_state, __ATOMIC_ACQUIRE);
+    if (st == 0) {
+        int expected = 0;
+        if (__atomic_compare_exchange_n(&s_ro_state, &expected, 1, 0,
+                                          __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+            int count = 0;
+            FILE *fp = fopen("/proc/self/maps", "re");
+            if (fp) {
+                char line[512];
+                while (fgets(line, sizeof line, fp) && count < 16) {
+                    if (!strstr(line, " r--p ") || !strstr(line, "[anon:dart-heap]")) continue;
+                    unsigned long long s = 0, e = 0;
+                    if (sscanf(line, "%llx-%llx", &s, &e) == 2 && e > s) {
+                        s_ro_heap[count].start = (uintptr_t)s;
+                        s_ro_heap[count].end = (uintptr_t)e;
+                        count++;
+                    }
+                }
+                fclose(fp);
+            }
+            s_ro_count = count;
+            __atomic_store_n(&s_ro_state, count > 0 ? 2 : 0, __ATOMIC_RELEASE);
+            st = count > 0 ? 2 : 0;
+        } else {
+            while ((st = __atomic_load_n(&s_ro_state, __ATOMIC_ACQUIRE)) == 1) {
+            }
+        }
+    }
+    if (st == 2) {
+        int count = s_ro_count;
+        for (int i = 0; i < count; i++) {
+            if (addr >= s_ro_heap[i].start && addr < s_ro_heap[i].end) {
+                return 1;
+            }
+        }
+    }
     Dl_info di;
     return dladdr((const void *)addr, &di) != 0;
 }
@@ -1034,6 +1077,7 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
 {
     static int installed;
     if (installed || !api || !api->hook || !lib) return;
+    if (!g_home_options.ws.dock_custom) return;
     if (g_home_options.workstation_targets_present < 6) return;
 
     struct {

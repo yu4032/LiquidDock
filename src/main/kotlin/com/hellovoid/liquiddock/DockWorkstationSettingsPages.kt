@@ -72,6 +72,13 @@ internal fun DockPage(
                     stringResource(R.string.dock_customization_summary),
                     masterEnabled,
                 ) { dockEnabled = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.PHONE_DOCK_GLASS,
+                    "手机桌面 Dock 玻璃背景",
+                    "为手机桌面 Hotseat 添加类似平板的液态玻璃 Dock 背景栏，并应用下方 Dock 尺寸、位置与圆角设置；重启桌面生效",
+                    masterEnabled,
+                )
             }
         }
         dockEntries.filter { availability.allows(it.page) }.forEach { entry ->

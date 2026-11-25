@@ -82,6 +82,7 @@ object Os4NativeConfPublisher {
             val anyGlass = options.glassEnabled || options.softGlassEnabled
             if (options.glassEnabled) append("glass_enabled=1\n")
             if (options.softGlassEnabled) append("soft_glass_enabled=1\n")
+            if (options.phoneDockGlass) append("phone_dock_glass=1\n")
             if (options.glassEnabled && options.prismalOverrides.isNotEmpty()) {
                 for (spec in Os4MainScreenOptions.prismalSpecs) {
                     val v = options.prismalOverrides[spec.confKey] ?: continue

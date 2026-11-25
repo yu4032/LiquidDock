@@ -83,9 +83,7 @@ static void ld_superellipse_install(const struct native_api *api)
     uintptr_t base = ld_se_engine_base();
     if (!base) return;
     void *fn = (void *)(base + LD_SUPERELLIPSE_VADDR);
-    /* sub sp,sp,#0x50 / stp x30,x21,[sp,#0x30] / stp x20,x19,[sp,#0x40] */
-    static const uint32_t prologue[3] = {0xd10143ffu, 0xa90357feu, 0xa9044ff4u};
-    if (memcmp(fn, prologue, sizeof prologue) != 0) {
+    if ((*(const uint32_t *)fn & 0xff8003ffu) != 0xd10003ffu) {
         state = 2;
         ld_blog("superellipse: prologue mismatch at %p", fn);
         return;

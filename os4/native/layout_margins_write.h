@@ -132,9 +132,11 @@ static void ld_layout_margins_write_install(const struct native_api *api, ld_lib
 
     uintptr_t fn = 0;
     if (!ld_vaddr_to_runtime(lib, LD_LMW_VADDR, &fn)) return;
-    /* stp x29,x30,[x15,#-0x10]! / mov x29,x15 / sub x15,x15,#0x28 */
-    static const uint32_t prologue[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd100a1efu};
-    if (memcmp((const void *)fn, prologue, sizeof prologue) != 0) {
+    if (!executable_range(fn, 16)) { state = 2; return; }
+    const uint32_t *insns = (const uint32_t *)fn;
+    if (insns[0] != 0xa9bf79fdu || insns[1] != 0xaa0f03fdu ||
+        (insns[2] & 0xff8003ffu) != 0xd10001efu ||
+        !ld_hook_site_safe(fn, "margins-write")) {
         state = 2;
         ld_blog("margins-write: prologue mismatch at %p", (void *)fn);
         return;

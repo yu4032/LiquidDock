@@ -40,6 +40,15 @@ __attribute__((naked, used)) static void ld_widget_can_resize_always(void)
     );
 }
 
+static inline int ld_is_widget_axis_leaf(uintptr_t addr)
+{
+    const uint32_t *w = (const uint32_t *)addr;
+    uint32_t rt = w[0] & 0x1fu;
+    return (w[0] & 0xfffffc00u) == 0xb8423000u &&
+           w[1] == (0x8b1c8000u | (rt << 5) | rt) &&
+           w[2] == 0xf9402370u;
+}
+
 static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *lib)
 {
     static int state;
@@ -73,9 +82,10 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
             g_home_options.widget_resize_clear_vaddr, g_home_options.widget_resize_clear_size,
             0x1a30504u, resize_pat, 16, "widget resize");
     }
-    if (!fn) return;
-    static const uint32_t prologue[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu};
-    if (memcmp((const void *)fn, prologue, sizeof prologue) != 0) {
+    if (!fn || !executable_range(fn, 16)) return;
+    const uint32_t *fn_insns = (const uint32_t *)fn;
+    if (fn_insns[0] != 0xa9bf79fdu || fn_insns[1] != 0xaa0f03fdu ||
+        (fn_insns[2] & 0xff8003ffu) != 0xd10001efu) {
         state = 2;
         ld_blog("widget resize: prologue mismatch at %p", (void *)fn);
         return;
@@ -91,32 +101,32 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
 
     /* Corner handles: force the two axis predicates to TRUE so a 1x1 widget can
      * grow. Same Dart TRUE singleton, same leaf ABI. */
-    static const uint32_t pro_v[3] = {0xb8423022u, 0x8b1c8042u, 0xf9402370u};
     static const uintptr_t vert_addrs[] = { 0x1132940u, 0x11d0c5cu, 0x11d0e94u };
     static const uintptr_t horiz_addrs[] = { 0x11329a8u, 0x11d0cc4u, 0x11d0efcu };
     uintptr_t fv = 0, fh = 0;
     for (size_t i = 0; i < sizeof(vert_addrs)/sizeof(vert_addrs[0]); i++) {
         uintptr_t cand = 0;
-        if (ld_vaddr_to_runtime(lib, vert_addrs[i], &cand) &&
-            memcmp((const void *)cand, pro_v, sizeof pro_v) == 0) {
+        if (ld_vaddr_to_runtime(lib, vert_addrs[i], &cand) && executable_range(cand, 12) &&
+            ld_is_widget_axis_leaf(cand)) {
             fv = cand;
             break;
         }
     }
     for (size_t i = 0; i < sizeof(horiz_addrs)/sizeof(horiz_addrs[0]); i++) {
         uintptr_t cand = 0;
-        if (ld_vaddr_to_runtime(lib, horiz_addrs[i], &cand) &&
-            memcmp((const void *)cand, pro_v, sizeof pro_v) == 0) {
+        if (ld_vaddr_to_runtime(lib, horiz_addrs[i], &cand) && executable_range(cand, 12) &&
+            ld_is_widget_axis_leaf(cand)) {
             fh = cand;
             break;
         }
     }
     if (!fv || !fh) {
         uintptr_t base = 0;
-        if (ld_vaddr_to_runtime(lib, 0x11d0c5cu, &base) && executable_range(base - 0x80000u, 0x100000u)) {
-            for (uintptr_t p = base - 0x80000u; p <= base + 0x80000u; p += 4) {
-                if (memcmp((const void *)p, pro_v, sizeof pro_v) == 0 &&
-                    memcmp((const void *)(p + 0x68u), pro_v, sizeof pro_v) == 0) {
+        if (ld_vaddr_to_runtime(lib, 0x11d0c5cu, &base) && base >= 0x80000u &&
+            executable_range(base - 0x80000u, 0x100000u)) {
+            uintptr_t end = base + 0x80000u - 0x74u;
+            for (uintptr_t p = base - 0x80000u; p <= end; p += 4) {
+                if (ld_is_widget_axis_leaf(p) && ld_is_widget_axis_leaf(p + 0x68u)) {
                     if (!fv) fv = p;
                     if (!fh) fh = p + 0x68u;
                     break;

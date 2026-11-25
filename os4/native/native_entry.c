@@ -70,6 +70,7 @@ static void (*g_orig_rust_orientation)(void *);
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
 #include "workstation.h"
+#include "phone_dock_glass.h"
 /* The rotation provider is included before the helper implementation below. */
 static void pin_installed_hook(uintptr_t site);
 #include "rotation_provider.h"
@@ -1561,6 +1562,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_resize_install(api,&lib);
     ld_ws_resolve_page_fields(&lib);
     ld_workstation_install(api,&lib);
+    ld_install_phone_dock_glass(api,&lib);
     int any_glass = g_home_options.glass_enabled || g_home_options.soft_glass_enabled;
     int se_on = any_glass && g_home_options.prismal.continuous_corners;
     ld_prismal_glass_install_ex(api, g_home_options.glass_enabled,
@@ -1634,7 +1636,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         if (ld_vaddr_to_runtime(&lib, g_home_options.widget_geometry_vaddr[0], &height_fn) &&
                 executable_range(height_fn, g_home_options.widget_geometry_size[0]) &&
                 g_home_options.widget_geometry_size[0] >= 0x100u) {
-            static const uint32_t height_alloc_words[] = {0xa9460341u, 0x91004021u, 0xeb01005fu};
             size_t hsz = g_home_options.widget_geometry_size[0];
             uintptr_t found_site = 0, found_alloc = 0;
             for (size_t off = 0x20; off + 16 <= hsz && off < 0x100; off += 4) {
@@ -1643,9 +1644,32 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                     break;
                 }
             }
-            for (size_t off = 0x80; off + sizeof height_alloc_words + 0x30 <= hsz; off += 4) {
-                if (memcmp((void *)(height_fn + off), height_alloc_words, sizeof height_alloc_words) == 0) {
-                    found_alloc = height_fn + off;
+            const uint32_t *insns = (const uint32_t *)height_fn;
+            size_t count = hsz / sizeof(uint32_t);
+            for (size_t idx = 0x20; idx + 6 <= count; idx++) {
+                /* Match register-agnostic Dart Double allocation fast-path:
+                 *   ldp  xRt1, xRt2, [x26, #0x60]
+                 *   add  xRt1, xRt1, #0x10
+                 *   cmp  xRt2, xRt1
+                 * followed shortly by `stur d1, [xRt1, #7]`. */
+                uint32_t w0 = insns[idx];
+                if ((w0 & 0xffff83e0u) != 0xa9460340u) continue;
+                uint32_t rt1 = w0 & 0x1fu;
+                uint32_t rt2 = (w0 >> 10) & 0x1fu;
+                if (rt1 == rt2 || rt1 >= 31u || rt2 >= 31u) continue;
+                uint32_t expect_add = 0x91004000u | (rt1 << 5) | rt1;
+                uint32_t expect_cmp = 0xeb00001fu | (rt1 << 16) | (rt2 << 5);
+                if (insns[idx + 1] != expect_add || insns[idx + 2] != expect_cmp) continue;
+                uint32_t expect_stur_d1 = 0xfc007001u | (rt1 << 5);
+                int stores_d1 = 0;
+                for (size_t k = 3; k < 14 && idx + k < count; k++) {
+                    if (insns[idx + k] == expect_stur_d1) {
+                        stores_d1 = 1;
+                        break;
+                    }
+                }
+                if (stores_d1) {
+                    found_alloc = height_fn + idx * sizeof(uint32_t);
                     break;
                 }
             }
@@ -1656,24 +1680,40 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         }
         if (ld_vaddr_to_runtime(&lib, g_home_options.widget_geometry_vaddr[1], &content_fn) &&
                 executable_range(content_fn, g_home_options.widget_geometry_size[1])) {
-            static const uint32_t size_stores[] = {0xfc5c83a0u, 0xfc007000u, 0xfc5d03a0u, 0xfc00f000u};
-            size_t size = g_home_options.widget_geometry_size[1];
-            for (size_t off = 0; off + sizeof size_stores <= size; off += 4) {
-                if (memcmp((void *)(content_fn + off), size_stores, sizeof size_stores) == 0) {
-                    content_site = content_fn + off;
-                    break;
-                }
+            const uint32_t *insns = (const uint32_t *)content_fn;
+            size_t count = g_home_options.widget_geometry_size[1] / sizeof(uint32_t);
+            for (size_t i = 0; i + 4 <= count; i++) {
+                /* ldur dRt1, [x29, #-0x38] ; stur dRt1, [xRn, #7]
+                 * ldur dRt2, [x29, #-0x30] ; stur dRt2, [xRn, #0xf] */
+                uint32_t w0 = insns[i], w1 = insns[i + 1], w2 = insns[i + 2], w3 = insns[i + 3];
+                if ((w0 & 0xffffffe0u) != 0xfc5c83a0u) continue;
+                uint32_t rt1 = w0 & 0x1fu;
+                if ((w1 & 0xfffffc00u) != 0xfc007000u || (w1 & 0x1fu) != rt1) continue;
+                uint32_t rn = (w1 >> 5) & 0x1fu;
+                if ((w2 & 0xffffffe0u) != 0xfc5d03a0u) continue;
+                uint32_t rt2 = w2 & 0x1fu;
+                if (w3 != (0xfc00f000u | (rn << 5) | rt2)) continue;
+                content_site = content_fn + i * sizeof(uint32_t);
+                break;
             }
         }
         if (ld_vaddr_to_runtime(&lib, g_home_options.widget_geometry_vaddr[2], &spec_fn) &&
                 executable_range(spec_fn, g_home_options.widget_geometry_size[2])) {
-            static const uint32_t strides[] = {0xfc42b001u, 0xfc1c83a1u, 0xfc433002u, 0xfc1d03a2u};
-            size_t size = g_home_options.widget_geometry_size[2];
-            for (size_t off = 0; off + sizeof strides + 16 <= size; off += 4) {
-                if (memcmp((void *)(spec_fn + off), strides, sizeof strides) == 0) {
-                    spec_site = spec_fn + off + sizeof strides;
-                    break;
-                }
+            const uint32_t *insns = (const uint32_t *)spec_fn;
+            size_t count = g_home_options.widget_geometry_size[2] / sizeof(uint32_t);
+            for (size_t i = 0; i + 8 <= count; i++) {
+                /* ldur dRt1, [xRn, #0x2b] ; stur dRt1, [x29, #-0x38]
+                 * ldur dRt2, [xRn, #0x33] ; stur dRt2, [x29, #-0x30] */
+                uint32_t w0 = insns[i], w1 = insns[i + 1], w2 = insns[i + 2], w3 = insns[i + 3];
+                if ((w0 & 0xfffffc00u) != 0xfc42b000u) continue;
+                uint32_t rt1 = w0 & 0x1fu;
+                uint32_t rn = (w0 >> 5) & 0x1fu;
+                if (w1 != (0xfc1c83a0u | rt1)) continue;
+                if ((w2 & 0xfffffc00u) != 0xfc433000u || ((w2 >> 5) & 0x1fu) != rn) continue;
+                uint32_t rt2 = w2 & 0x1fu;
+                if (w3 != (0xfc1d03a0u | rt2)) continue;
+                spec_site = spec_fn + (i + 4u) * sizeof(uint32_t);
+                break;
             }
         }
         if (content_site && spec_site) {
@@ -1702,16 +1742,12 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
         {LD_GLASS_FILTER_START,LD_GLASS_FILTER_SITE,ld_glass_filter_words,sizeof ld_glass_filter_words,(void*)repl_glass_filter,&g_orig_glass_filter},
-        {LD_HOME_INDICATOR_FUNCTION_OFFSET,LD_HOME_INDICATOR_HOOK_OFFSET,
-            ld_home_indicator_words,sizeof ld_home_indicator_words,(void *)repl_home_indicator,&g_orig_home_indicator},
         {LD_DOCK_FUNCTION_SIZE_START,LD_DOCK_FUNCTION_SIZE_SITE,
             ld_dock_function_size_body,sizeof ld_dock_function_size_body,(void *)repl_dock_function_size,&g_orig_dock_function_size},
         {LD_DOCK_ICON_PADDING_START,LD_DOCK_ICON_PADDING_SITE,
             ld_dock_icon_padding_body,sizeof ld_dock_icon_padding_body,(void *)repl_dock_icon_padding,&g_orig_dock_icon_padding},
         {LD_DOCK_BOTTOM_START,LD_DOCK_BOTTOM_SITE,
             ld_dock_bottom_body,sizeof ld_dock_bottom_body,(void *)repl_dock_bottom,&g_orig_dock_bottom},
-        {LD_DOCK_CONTAINER_HEIGHT_START,LD_DOCK_CONTAINER_HEIGHT_SITE,
-            ld_dock_container_height_body,sizeof ld_dock_container_height_body,(void *)repl_dock_container_height,&g_orig_dock_container_height},
         /* _DockLightContentState._stableHeight is intentionally excluded: hooking it
          * makes the Workstation Floating Dock invisible until a popup menu rebuilds it. */
         {LD_DOCK_WINDOW_HEIGHT_START,LD_DOCK_WINDOW_HEIGHT_SITE,
@@ -1732,14 +1768,14 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                 &lib, 1, g_home_options.glass_scope_vaddr[4], g_home_options.glass_scope_size[4],
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
                 home_hooks[i].size / 4, "home_opt glass_v7");
-        } else if (i == 4 && g_home_options.home_opt_targets_present) {
+        } else if (i == 3 && g_home_options.home_opt_targets_present) {
             fn = ld_resolve_sym_scan_or_aot(
                 &lib, 1, g_home_options.home_opt_vaddr[5], g_home_options.home_opt_size[5], 0x100u,
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
                 home_hooks[i].size / 4, "home_opt margin_bottom");
         } else if (g_home_options.home_opt_targets_present &&
-                   (i == 2 || i == 3 || i == 6 || i == 7 || i == 8 || i == 9)) {
-            int opt_idx = (i == 2) ? 3 : (i == 3) ? 4 : (i == 6) ? 6 : (i == 7) ? 7 : (i == 8) ? 8 : 9;
+                   (i == 1 || i == 2 || i == 4 || i == 5 || i == 6 || i == 7)) {
+            int opt_idx = (i == 1) ? 3 : (i == 2) ? 4 : (i == 4) ? 6 : (i == 5) ? 7 : (i == 6) ? 8 : 9;
             fn = ld_resolve_sym_prologue_or_aot(
                 &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
@@ -2075,6 +2111,7 @@ static void install_grid_hook(const struct native_api *api) {
             || g_home_options.big_folder_enabled || g_home_options.widget_1x1_to_2x2_enabled
             || g_home_options.folder_grid_cols > 0 || g_home_options.folder_grid_rows > 0
             || g_home_options.dock.enabled || g_home_options.glass_enabled || g_home_options.soft_glass_enabled
+            || g_home_options.phone_dock_glass
             || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100
             || g_home_options.allapps_blur_percent != 100
             || g_home_options.ws_allapps_blur_percent != 100
@@ -2083,7 +2120,7 @@ static void install_grid_hook(const struct native_api *api) {
             || ld_hm_has_any_offsets()))
         install_grid_hook_unlocked(api);
     if (app_loaded) ld_write_hook_status();
-    if((g_installed || g_os4_glass_installed || g_hm_cc_orig != NULL) && !g_trace_started) {
+    if((g_installed || g_os4_glass_installed || g_hm_cc_orig != NULL || g_pd_installed) && !g_trace_started) {
         pthread_t thread;
         if(pthread_create(&thread,NULL,trace_thread,NULL)==0) {
             pthread_detach(thread); g_trace_started=true;

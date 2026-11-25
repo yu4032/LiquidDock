@@ -196,6 +196,7 @@ internal object Os4GlassSymbols {
         val folderBlurTarget: String = "",
         val shortcutBlurTargets: String = "",
         val wsAllAppsBlurTarget: String = "",
+        val phoneDockTargets: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -352,6 +353,15 @@ internal object Os4GlassSymbols {
                 "BlurUtilities.fastBlur",
             ),
         )
+        val phoneDockTargets = fromMiniElfSymbolList(
+            mini,
+            listOf(
+                "_HotseatWidgetState._buildItems",
+                "HotseatLayerGetxController.backgroundLayout",
+                "_DockBackgroundViewState._buildStrategy",
+                "_DockLightContentState._buildContent",
+            ),
+        )
         return ResolvedTargets(
             glass,
             layoutTargets,
@@ -388,6 +398,7 @@ internal object Os4GlassSymbols {
             folderBlurTarget,
             shortcutBlurTargets,
             wsAllAppsBlurTarget,
+            phoneDockTargets,
         )
     }
 

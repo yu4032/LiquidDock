@@ -121,6 +121,7 @@ data class Os4MainScreenOptions(
     val divider: Os4DividerOptions = Os4DividerOptions(),
     val glassEnabled: Boolean = false,
     val softGlassEnabled: Boolean = false,
+    val phoneDockGlass: Boolean = false,
     val prismalOverrides: Map<String, Double> = emptyMap(),
     val glassNativeOverrides: Map<String, Double> = emptyMap(),
     val glassDockOverrides: Map<String, Double> = emptyMap(),
@@ -266,6 +267,7 @@ data class Os4MainScreenOptions(
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Glass.SOFT_GLASS_ENABLED.name())
+            add(ConfigSchema.Glass.PHONE_DOCK_GLASS.name())
             prismalSpecs.forEach { spec ->
                 add(spec.configKey.name())
                 if (spec.isDp) add("${spec.configKey.name()}_tenths")
@@ -498,6 +500,7 @@ data class Os4MainScreenOptions(
                             ),
                             glassEnabled = glassEnabled,
                             softGlassEnabled = softGlassEnabled,
+                            phoneDockGlass = boolean(ConfigSchema.Glass.PHONE_DOCK_GLASS),
                             prismalOverrides = prismalOverrides,
                             glassNativeOverrides = nativeGlassOverrides,
                             glassDockOverrides = dockGlassOverrides,
