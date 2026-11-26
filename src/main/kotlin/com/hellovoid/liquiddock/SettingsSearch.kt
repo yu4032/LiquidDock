@@ -143,9 +143,14 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             row(GboardGlassPreferences.TINT_ALPHA_KEY, "染色强度"),
             row(GboardGlassPreferences.BLUR_KEY, "玻璃模糊"),
         )
-        Page.GridBasics -> listOf(
+        Page.IconSize -> listOf(
             toggle(ConfigSchema.Grid.ICON_SIZE_ENABLED, "自定义图标大小"),
             number(launcher450IconSizeSpec),
+            number(dockIconSizeSpec),
+            number(wsIconSizeSpec),
+            number(wsDockIconSizeSpec),
+        ) + folderIconSizeSpecs.map(::number)
+        Page.GridBasics -> listOf(
             toggle(ConfigSchema.Grid.BIG_FOLDER_ENABLED, "启用桌面大文件夹"),
             toggle(ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED, "大文件夹对齐图标尺寸"),
             toggle(ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED, "显示大文件夹标题"),
@@ -251,21 +256,29 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
             GboardGlassPreferences.BLUR_KEY -> 9
             else -> -1
         }
-        Page.GridBasics -> when (key) {
+        Page.IconSize -> when (key) {
             ConfigSchema.Grid.ICON_SIZE_ENABLED.name() -> 2
-            launcher450IconSizeSpec.key -> 3
-            ConfigSchema.Grid.BIG_FOLDER_ENABLED.name() -> 5
-            ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED.name() -> 6
-            ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED.name() -> 7
-            os4FolderPreviewInsetSpec.key -> 8
-            ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name() -> 10
-            ConfigSchema.Grid.PREVENT_WIDGET_STRETCH.name() -> 11
-            ConfigSchema.Grid.ENABLED.name() -> 13
-            ConfigSchema.Grid.FOLDER_GRID_ENABLED.name() -> 13 + gridDimensionSpecs.size + 2
+            launcher450IconSizeSpec.key -> 4
+            dockIconSizeSpec.key -> 5
+            wsIconSizeSpec.key -> 7
+            wsDockIconSizeSpec.key -> 8
+            else -> folderIconSizeSpecs.indexOfFirst { it.key == key }
+                .takeIf { it >= 0 }?.plus(10)
+                ?: -1
+        }
+        Page.GridBasics -> when (key) {
+            ConfigSchema.Grid.BIG_FOLDER_ENABLED.name() -> 2
+            ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED.name() -> 3
+            ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED.name() -> 4
+            os4FolderPreviewInsetSpec.key -> 5
+            ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name() -> 7
+            ConfigSchema.Grid.PREVENT_WIDGET_STRETCH.name() -> 8
+            ConfigSchema.Grid.ENABLED.name() -> 10
+            ConfigSchema.Grid.FOLDER_GRID_ENABLED.name() -> 10 + gridDimensionSpecs.size + 2
             else -> gridDimensionSpecs.indexOfFirst { it.key == key }
-                .takeIf { it >= 0 }?.plus(14)
+                .takeIf { it >= 0 }?.plus(11)
                 ?: folderGridDimensionSpecs.indexOfFirst { it.key == key }
-                    .takeIf { it >= 0 }?.plus(14 + gridDimensionSpecs.size + 2)
+                    .takeIf { it >= 0 }?.plus(11 + gridDimensionSpecs.size + 2)
                 ?: -1
         }
         Page.GlassIcons -> when (key) {

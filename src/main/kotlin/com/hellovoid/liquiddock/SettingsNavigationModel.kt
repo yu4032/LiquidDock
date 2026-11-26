@@ -11,6 +11,7 @@ internal enum class Page(val titleRes: Int) {
     Logs(R.string.page_logs),
 
     Grid(R.string.page_grid),
+    IconSize(R.string.page_icon_size),
     GridBasics(R.string.page_grid_basics),
     GridLandscape(R.string.page_grid_landscape),
     GridPortrait(R.string.page_grid_portrait),
@@ -103,6 +104,7 @@ internal val overviewEntries = listOf(
 
 internal val layoutEntries = listOf(
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、大文件夹、小组件缩放与横竖屏间距"),
+    HubEntry(Page.IconSize, R.string.page_icon_size, "独立调节普通与工作台工作区、Dock 及大文件夹图标大小"),
     HubEntry(Page.Dock, R.string.page_dock, "Dock 几何尺寸、位置、圆角与分隔线"),
     HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock、所有应用布局与多分屏"),
 )
@@ -125,7 +127,7 @@ internal val moreEntries = listOf(
 )
 
 internal val gridEntries = listOf(
-    HubEntry(Page.GridBasics, R.string.page_grid_basics, "图标大小、大文件夹、小组件缩放、网格与文件夹行列"),
+    HubEntry(Page.GridBasics, R.string.page_grid_basics, "大文件夹、小组件缩放、网格与文件夹行列"),
     HubEntry(Page.GridLandscape, R.string.page_grid_landscape, "横屏距离与页面指示器"),
     HubEntry(Page.GridPortrait, R.string.page_grid_portrait, "竖屏距离与页面指示器"),
 )

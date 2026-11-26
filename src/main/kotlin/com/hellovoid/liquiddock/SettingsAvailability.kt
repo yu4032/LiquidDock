@@ -49,7 +49,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
         // functional OS4 support. The native bootstrap currently installs no hooks.
         // Keep the set narrow; enroll other pages as their implementation begins.
         private val OS4_TESTING_PAGES = setOf(
-            Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
+            Page.Grid, Page.IconSize, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockGeometry,
             Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,

@@ -18,13 +18,15 @@
  * Keep the cell strides and the separately computed +0x77 value untouched.
  */
 static inline void ld_apply_home_icons(struct ld_dart_context *c,uintptr_t grid) {
-    int percent=g_home_options.icon_size_percent;
-    if(!g_hook_pin_ok || !g_home_options.icon_size_enabled || percent<80 || percent>120 || percent==100
+    if(!g_hook_pin_ok || !g_home_options.icon_size_enabled
             || !(grid&1) || grid==c->x[22]) return;
     uintptr_t variables=ld_heap_pointer(c,grid,0x8f),icons=ld_heap_pointer(c,grid,0x6b);
     uint32_t layout=0;
-    if(!variables || !icons || !ld_read_heap(variables+0x27,&layout,sizeof layout)
-            || !ld_is_fullscreen_layout(c, layout)) return;
+    if(!variables || !icons || !ld_read_heap(variables+0x27,&layout,sizeof layout)) return;
+    int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED) ? 1 : 0;
+    if(!is_laptop && !ld_is_fullscreen_layout(c, layout)) return;
+    int percent = is_laptop ? g_home_options.ws_icon_size_percent : g_home_options.icon_size_percent;
+    if(percent<70 || percent>130 || percent==100) return;
     double size=0,top=0;
     if(!ld_read_heap(icons+0x17,&size,sizeof size) || !ld_read_heap(icons+0x1f,&top,sizeof top)
             || !isfinite(size) || size<=0 || !isfinite(top)) return;
@@ -34,11 +36,11 @@ static inline void ld_apply_home_icons(struct ld_dart_context *c,uintptr_t grid)
     if(!isfinite(scaled) || scaled<=0 || !isfinite(shifted)) return;
     memcpy((void *)(icons+0x17),&scaled,sizeof scaled);
     memcpy((void *)(icons+0x1f),&shifted,sizeof shifted);
-    static volatile int logged = 0;
-    if (!logged) {
-        logged = 1;
-        ld_blog("home icons applied: percent=%d size=%.2f->%.2f top=%.2f->%.2f",
-                percent, size, scaled, top, shifted);
+    static volatile int logged[2] = {0, 0};
+    if (!logged[is_laptop]) {
+        logged[is_laptop] = 1;
+        ld_blog("home icons applied: laptop=%d percent=%d size=%.2f->%.2f top=%.2f->%.2f",
+                is_laptop, percent, size, scaled, top, shifted);
     }
 }
 #endif

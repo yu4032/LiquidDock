@@ -11,7 +11,7 @@ class SettingsAvailabilityTest {
 
     @Test fun os4PortPagesAreNavigableForTestingWithoutBeingMarkedReady() {
         val testing = listOf(
-            Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
+            Page.Grid, Page.IconSize, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockGeometry,
             Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,

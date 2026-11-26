@@ -105,6 +105,7 @@
     <string name="page_glass_hub">外观</string>
     <string name="page_more_hub">更多</string>
     <string name="page_grid_basics">网格基础</string>
+    <string name="page_icon_size">图标大小</string>
     <string name="page_grid_landscape">横屏布局</string>
     <string name="page_grid_portrait">竖屏布局</string>
     <string name="page_dock_behavior">Dock 行为</string>

@@ -254,6 +254,12 @@ object Os4ConfigSync {
                     if (resolvedTargets.folderOpenFixTargets.isNotEmpty()) {
                         append("folder_open_fix_targets=").append(resolvedTargets.folderOpenFixTargets).append('\n')
                     }
+                    if (resolvedTargets.dockIconSizeTarget.isNotEmpty()) {
+                        append("dock_icon_size_target=").append(resolvedTargets.dockIconSizeTarget).append('\n')
+                    }
+                    if (resolvedTargets.folderPreviewDimTargets.isNotEmpty()) {
+                        append("folder_preview_dim_targets=").append(resolvedTargets.folderPreviewDimTargets).append('\n')
+                    }
                     if (resolvedTargets.widgetCornerTarget.isNotEmpty()) {
                         append("widget_corner_target=").append(resolvedTargets.widgetCornerTarget).append('\n')
                     }

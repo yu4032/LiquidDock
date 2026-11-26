@@ -107,6 +107,7 @@
     <string name="page_glass_hub">Appearance</string>
     <string name="page_more_hub">More</string>
     <string name="page_grid_basics">Grid basics</string>
+    <string name="page_icon_size">Icon size</string>
     <string name="page_grid_landscape">Landscape layout</string>
     <string name="page_grid_portrait">Portrait layout</string>
     <string name="page_dock_behavior">Dock behavior</string>

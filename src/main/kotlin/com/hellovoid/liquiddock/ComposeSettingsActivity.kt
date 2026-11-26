@@ -411,6 +411,9 @@ private fun LiquidDockSettings(
                     )
 
                     Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.IconSize -> IconSizePage(padding, prefs, masterEnabled,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.IconSize.name }
+                            ?.let { SettingsFocusRequest(Page.IconSize, it, searchFocusSequence) })
                     Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled,
                         searchFocusKey?.takeIf { searchFocusPage == Page.GridBasics.name }
                             ?.let { SettingsFocusRequest(Page.GridBasics, it, searchFocusSequence) })

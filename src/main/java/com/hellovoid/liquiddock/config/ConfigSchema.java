@@ -116,6 +116,33 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> ICON_SIZE_PERCENT = integer(
                 "launcher450_icon_size_percent", 100, 100, 100, 80, 120,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_ICON_SIZE_PERCENT = integer(
+                "launcher450_dock_icon_size_percent", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> WS_ICON_SIZE_PERCENT = integer(
+                "launcher450_ws_icon_size_percent", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> WS_DOCK_ICON_SIZE_PERCENT = integer(
+                "launcher450_ws_dock_icon_size_percent", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FOLDER_ICON_SIZE_2X2 = integer(
+                "launcher450_folder_icon_size_2x2", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FOLDER_ICON_SIZE_2X2_9 = integer(
+                "launcher450_folder_icon_size_2x2_9", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FOLDER_ICON_SIZE_1X2 = integer(
+                "launcher450_folder_icon_size_1x2", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FOLDER_ICON_SIZE_2X1 = integer(
+                "launcher450_folder_icon_size_2x1", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FOLDER_ICON_SIZE_4X2 = integer(
+                "launcher450_folder_icon_size_4x2", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FOLDER_ICON_SIZE_4X2_6X3 = integer(
+                "launcher450_folder_icon_size_4x2_6x3", 100, 100, 100, 70, 130,
+                ConfigKey.ExportMode.ALWAYS);
 
         public static final ConfigKey<Integer> LANDSCAPE_HORIZONTAL_DISTANCE = dp(
                 "grid_landscape_horizontal_distance", 0, 0, 0, -600, 600,
@@ -940,7 +967,11 @@ public final class ConfigSchema {
                 Grid.BIG_FOLDER_TITLE_ENABLED, Grid.FOLDER_PREVIEW_INSET,
                 Grid.FOLDER_GRID_ENABLED, Grid.FOLDER_GRID_COLUMNS, Grid.FOLDER_GRID_ROWS,
                 Grid.WIDGET_1X1_TO_2X2_ENABLED, Grid.PREVENT_WIDGET_STRETCH,
-                Grid.ICON_SIZE_PERCENT,
+                Grid.ICON_SIZE_PERCENT, Grid.DOCK_ICON_SIZE_PERCENT,
+                Grid.WS_ICON_SIZE_PERCENT, Grid.WS_DOCK_ICON_SIZE_PERCENT,
+                Grid.FOLDER_ICON_SIZE_2X2, Grid.FOLDER_ICON_SIZE_2X2_9, Grid.FOLDER_ICON_SIZE_1X2,
+                Grid.FOLDER_ICON_SIZE_2X1, Grid.FOLDER_ICON_SIZE_4X2,
+                Grid.FOLDER_ICON_SIZE_4X2_6X3,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,

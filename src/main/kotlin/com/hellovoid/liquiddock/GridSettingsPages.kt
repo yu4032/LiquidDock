@@ -93,6 +93,72 @@ internal fun GridPage(
 }
 
 @Composable
+internal fun IconSizePage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    searchFocus: SettingsFocusRequest? = null,
+) {
+    val enabledRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Grid.ICON_SIZE_ENABLED.name()] ?: 0
+    var iconSizeEnabled by remember(enabledRevision) {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
+                ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
+            ),
+        )
+    }
+    DenseSettingsList(
+        padding,
+        stringResource(R.string.page_icon_size),
+        "独立调节普通模式、工作台模式的工作区与 Dock 图标大小，以及各类型大文件夹预览图标大小；重启桌面后生效。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.IconSize, it.key) },
+        focusSequence = searchFocus?.sequence,
+    ) {
+        item(key = "icon-size-master-heading") { SmallTitle("总开关") }
+        item(key = "icon-size-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
+                    "自定义图标大小",
+                    "开启后按下方分类独立生效；关闭则恢复系统默认尺寸；重启桌面后生效",
+                    masterEnabled,
+                ) { iconSizeEnabled = it }
+            }
+        }
+        item(key = "icon-size-normal-heading") { SmallTitle("普通模式") }
+        item(key = "icon-size-normal-workspace") {
+            SettingsCard {
+                IntSetting(prefs, launcher450IconSizeSpec, masterEnabled && iconSizeEnabled)
+            }
+        }
+        item(key = "icon-size-normal-dock") {
+            SettingsCard {
+                IntSetting(prefs, dockIconSizeSpec, masterEnabled && iconSizeEnabled)
+            }
+        }
+        item(key = "icon-size-ws-heading") { SmallTitle("工作台模式") }
+        item(key = "icon-size-ws-workspace") {
+            SettingsCard {
+                IntSetting(prefs, wsIconSizeSpec, masterEnabled && iconSizeEnabled)
+            }
+        }
+        item(key = "icon-size-ws-dock") {
+            SettingsCard {
+                IntSetting(prefs, wsDockIconSizeSpec, masterEnabled && iconSizeEnabled)
+            }
+        }
+        item(key = "icon-size-folder-heading") { SmallTitle("大文件夹图标（分类型）") }
+        items(folderIconSizeSpecs, key = { it.key }) { spec ->
+            SettingsCard {
+                IntSetting(prefs, spec, masterEnabled && iconSizeEnabled)
+            }
+        }
+    }
+}
+
+@Composable
 internal fun GridBasicsPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
@@ -117,14 +183,6 @@ internal fun GridBasicsPage(
             prefs.getBoolean(
                 ConfigSchema.Grid.ENABLED.name(),
                 ConfigSchema.Grid.ENABLED.uiDefault(),
-            ),
-        )
-    }
-    var iconSizeEnabled by remember {
-        mutableStateOf(
-            prefs.getBoolean(
-                ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
-                ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
             ),
         )
     }
@@ -155,31 +213,10 @@ internal fun GridBasicsPage(
     DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_basics),
-        "调整图标大小、大文件夹、小组件尺寸、工作区网格与文件夹展开行列。",
+        "调整大文件夹、小组件尺寸、工作区网格与文件夹展开行列。",
         focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GridBasics, it.key) },
         focusSequence = searchFocus?.sequence,
     ) {
-        item(key = "grid-icon-heading") { SmallTitle("图标大小") }
-        item(key = "grid-icon-enabled") {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
-                    "自定义图标大小",
-                    "工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
-                    masterEnabled,
-                ) { iconSizeEnabled = it }
-            }
-        }
-        item(key = "grid-icon-size") {
-            SettingsCard {
-                IntSetting(
-                    prefs,
-                    launcher450IconSizeSpec,
-                    masterEnabled && iconSizeEnabled,
-                )
-            }
-        }
         item(key = "grid-big-folder-heading") { SmallTitle("大文件夹") }
         item(key = "grid-big-folder-enabled") {
             SettingsCard {

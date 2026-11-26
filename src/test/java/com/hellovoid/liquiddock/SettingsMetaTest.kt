@@ -92,8 +92,6 @@ class SettingsMetaTest {
     @Test fun gridBasicsHasSemanticCellsAndDoesNotLoseItsPreflightControls() {
         val rows = customGlassSearchRows(Page.GridBasics)
         val expected = setOf(
-            com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
-            launcher450IconSizeSpec.key,
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_ENABLED.name(),
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED.name(),
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED.name(),
@@ -105,6 +103,17 @@ class SettingsMetaTest {
         ) + gridDimensionSpecs.map { it.key } + folderGridDimensionSpecs.map { it.key }
         assertEquals(expected, rows.map { it.key }.toSet())
         rows.forEach { assertTrue(customDenseFocusIndex(Page.GridBasics, it.key) != null) }
+
+        val iconRows = customGlassSearchRows(Page.IconSize)
+        val expectedIcons = setOf(
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
+            launcher450IconSizeSpec.key,
+            dockIconSizeSpec.key,
+            wsIconSizeSpec.key,
+            wsDockIconSizeSpec.key,
+        ) + folderIconSizeSpecs.map { it.key }
+        assertEquals(expectedIcons, iconRows.map { it.key }.toSet())
+        iconRows.forEach { assertTrue(customDenseFocusIndex(Page.IconSize, it.key) != null) }
     }
 
     @Test fun customMenuAndKeyboardPagesSearchActualOriginalControls() {

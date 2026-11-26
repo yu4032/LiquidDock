@@ -21,7 +21,7 @@ class SettingsGuiOrganizationContractTest {
 
     private val customRoutes = setOf(
         Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub, Page.ThemePalette,
-        Page.Grid, Page.GridBasics, Page.Dock, Page.DockRecentBlacklist,
+        Page.Grid, Page.IconSize, Page.GridBasics, Page.Dock, Page.DockRecentBlacklist,
         Page.Divider, Page.Workstation, Page.SoftGlass, Page.SoftGlassComponents,
         Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
         Page.Liquid, Page.SidebarEdge,
@@ -51,7 +51,7 @@ class SettingsGuiOrganizationContractTest {
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
             Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll,
             Page.HandleMenuCustomization, Page.ShortcutPopupCustomization,
-            Page.DialogCustomization, Page.Gboard, Page.GridBasics,
+            Page.DialogCustomization, Page.Gboard, Page.IconSize, Page.GridBasics,
             Page.Divider,
         )
         val catalog = settingsSearchCatalog({ "resource:$it" }, declared)
@@ -97,6 +97,7 @@ class SettingsGuiOrganizationContractTest {
             add(Page.SoftGlassComponents)
             add(Page.WidgetComponents)
             add(Page.Grid)
+            add(Page.IconSize)
             add(Page.GridBasics)
             add(Page.GridLandscape)
             add(Page.GridPortrait)

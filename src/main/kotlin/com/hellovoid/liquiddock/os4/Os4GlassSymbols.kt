@@ -193,6 +193,8 @@ internal object Os4GlassSymbols {
         val workstationPageFieldTargets: String = "",
         val folderLayoutSyncTargets: String = "",
         val folderOpenFixTargets: String = "",
+        val dockIconSizeTarget: String = "",
+        val folderPreviewDimTargets: String = "",
         val widgetCornerTarget: String = "",
         val folderBlurTarget: String = "",
         val shortcutBlurTargets: String = "",
@@ -341,6 +343,17 @@ internal object Os4GlassSymbols {
                 "FolderAnimController._refreshCachedGridParams" to 512L,
             ),
         )
+        val dockIconSizeTarget = fromMiniElfSymbolSpecs(
+            mini,
+            listOf("HotSeatsConstants2.mHotSeatsScale" to 32L),
+        )
+        val folderPreviewDimTargets = fromMiniElfSymbolSpecs(
+            mini,
+            listOf(
+                "BigFolderCommonStrategy.previewItemWidth" to 8L,
+                "BigFolderCommonStrategy.previewItemHeight" to 8L,
+            ),
+        )
         val widgetCornerTarget = fromMiniElfSingle(
             mini,
             "RoundedCornerEnforcementUtils.computeEnforcedRadius",
@@ -397,6 +410,8 @@ internal object Os4GlassSymbols {
             workstationPageFieldTargets,
             folderLayoutSyncTargets,
             folderOpenFixTargets,
+            dockIconSizeTarget,
+            folderPreviewDimTargets,
             widgetCornerTarget,
             folderBlurTarget,
             shortcutBlurTargets,

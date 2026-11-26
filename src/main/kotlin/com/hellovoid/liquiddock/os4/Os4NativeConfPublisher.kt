@@ -26,6 +26,15 @@ object Os4NativeConfPublisher {
         if (options.folderGridCols != 0 && options.folderGridCols !in 2..8) return null
         if (options.folderGridRows != 0 && options.folderGridRows !in 2..8) return null
         if (options.iconSizePercent !in 80..120) return null
+        if (options.dockIconSizePercent !in 70..130) return null
+        if (options.wsIconSizePercent !in 70..130) return null
+        if (options.wsDockIconSizePercent !in 70..130) return null
+        if (options.folderIconSize2x2 !in 70..130) return null
+        if (options.folderIconSize2x2Grid9 !in 70..130) return null
+        if (options.folderIconSize1x2 !in 70..130) return null
+        if (options.folderIconSize2x1 !in 70..130) return null
+        if (options.folderIconSize4x2 !in 70..130) return null
+        if (options.folderIconSize4x2SixByThree !in 70..130) return null
         if (Os4NativeGlassOptions.configLines(options.glassNativeOverrides) == null) return null
         if (Os4NativeGlassOptions.configLines(options.glassDockOverrides, "glass_native_dock_") == null) return null
         if (Os4NativeGlassOptions.configLines(options.glassIconOverrides, "glass_native_icon_") == null) return null
@@ -128,6 +137,33 @@ object Os4NativeConfPublisher {
             }
             if (options.widgetOverrides) append("widget_overrides=1\n")
             append("icon_size_percent=").append(options.iconSizePercent).append('\n')
+            if (options.dockIconSizePercent != 100) {
+                append("dock_icon_size_percent=").append(options.dockIconSizePercent).append('\n')
+            }
+            if (options.wsIconSizePercent != 100) {
+                append("ws_icon_size_percent=").append(options.wsIconSizePercent).append('\n')
+            }
+            if (options.wsDockIconSizePercent != 100) {
+                append("ws_dock_icon_size_percent=").append(options.wsDockIconSizePercent).append('\n')
+            }
+            if (options.folderIconSize2x2 != 100) {
+                append("folder_icon_size_2x2=").append(options.folderIconSize2x2).append('\n')
+            }
+            if (options.folderIconSize2x2Grid9 != 100) {
+                append("folder_icon_size_2x2_9=").append(options.folderIconSize2x2Grid9).append('\n')
+            }
+            if (options.folderIconSize1x2 != 100) {
+                append("folder_icon_size_1x2=").append(options.folderIconSize1x2).append('\n')
+            }
+            if (options.folderIconSize2x1 != 100) {
+                append("folder_icon_size_2x1=").append(options.folderIconSize2x1).append('\n')
+            }
+            if (options.folderIconSize4x2 != 100) {
+                append("folder_icon_size_4x2=").append(options.folderIconSize4x2).append('\n')
+            }
+            if (options.folderIconSize4x2SixByThree != 100) {
+                append("folder_icon_size_4x2_6x3=").append(options.folderIconSize4x2SixByThree).append('\n')
+            }
             if (grid) {
                 fun offsets(direction: String, offsets: Os4GridOffsets) {
                     append("grid_${direction}_horizontal_distance=").append(offsets.horizontal).append('\n')

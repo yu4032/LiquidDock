@@ -170,6 +170,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "home_margins.h"
 #include "folder_layout_sync.h"
 #include "folder_open_fix.h"
+#include "dock_icon_size.h"
 #include "safe_mode.h"
 #include "home_indicator.h"
 #include "home_widgets.h"
@@ -1575,6 +1576,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_home_margins_install(api,&lib);
     ld_folder_layout_sync_install(api,&lib);
     ld_folder_open_fix_install(api,&lib);
+    ld_dock_icon_size_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (g_installed) { update_layout_ready(); return; }
 

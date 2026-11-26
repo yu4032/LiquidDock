@@ -188,6 +188,15 @@ struct ld_grid_conf {
     int cols;   /* 0 = 不改（缺键）；否则 [LD_GRID_COLS_MIN, LD_GRID_COLS_MAX] */
     int rows;   /* 0 = 不改（缺键）；否则 [LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX] */
     int icon_size_enabled, icon_size_percent;
+    int dock_icon_size_percent;
+    int ws_icon_size_percent;
+    int ws_dock_icon_size_percent;
+    int folder_icon_size_2x2;
+    int folder_icon_size_2x2_9;
+    int folder_icon_size_1x2;
+    int folder_icon_size_2x1;
+    int folder_icon_size_4x2;
+    int folder_icon_size_4x2_6x3;
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
     int glass_enabled;
@@ -336,6 +345,12 @@ struct ld_grid_conf {
     int folder_open_fix_present;
     uint64_t folder_open_fix_vaddr[6];
     size_t folder_open_fix_size[6];
+    int dock_icon_size_target_present;
+    uint64_t dock_icon_size_vaddr;
+    size_t dock_icon_size_size;
+    int folder_preview_dim_present;
+    uint64_t folder_preview_dim_vaddr[2];
+    size_t folder_preview_dim_size[2];
 };
 
 static volatile int g_ws_is_laptop_mode __attribute__((used));
@@ -584,7 +599,7 @@ static inline int ld_grid_parse_aot_targets_max(const char *s,uint64_t *vaddr,si
             length=length*10+(size_t)(*p-'0');
             p++;
         }
-        if(p==last || (*last=='0' && p-last>1) || length<16 || length>max_bytes
+        if(p==last || (*last=='0' && p-last>1) || length<8 || length>max_bytes
                 || address>UINTPTR_MAX
                 || (uintptr_t)length>UINTPTR_MAX-(uintptr_t)address)
             return 0;
@@ -611,6 +626,15 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
 {
     struct ld_grid_conf c = {0};
     c.icon_size_percent = 100;
+    c.dock_icon_size_percent = 100;
+    c.ws_icon_size_percent = 100;
+    c.ws_dock_icon_size_percent = 100;
+    c.folder_icon_size_2x2 = 100;
+    c.folder_icon_size_2x2_9 = 100;
+    c.folder_icon_size_1x2 = 100;
+    c.folder_icon_size_2x1 = 100;
+    c.folder_icon_size_4x2 = 100;
+    c.folder_icon_size_4x2_6x3 = 100;
     c.recents_blur_percent = 100;
     c.allapps_blur_percent = 100;
     c.ws_allapps_blur_percent = 100;
@@ -1057,6 +1081,54 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.folder_open_fix_present = 1;
                     extra_seen |= 1u << 0;
+                } else if (strcmp(key, "dock_icon_size_target") == 0) {
+                    if ((extra_seen & (1u << 1)) ||
+                        !ld_grid_parse_aot_targets(val, &c.dock_icon_size_vaddr,
+                                                   &c.dock_icon_size_size, 1)) {
+                        bad=1; break;
+                    }
+                    c.dock_icon_size_target_present = 1;
+                    extra_seen |= 1u << 1;
+                } else if (strcmp(key, "folder_preview_dim_targets") == 0) {
+                    if ((extra_seen & (1u << 11)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.folder_preview_dim_vaddr,
+                                                       c.folder_preview_dim_size, 2, 256)) {
+                        bad=1; break;
+                    }
+                    c.folder_preview_dim_present = 1;
+                    extra_seen |= 1u << 11;
+                } else if (strcmp(key, "dock_icon_size_percent") == 0 ||
+                           strcmp(key, "ws_icon_size_percent") == 0 ||
+                           strcmp(key, "ws_dock_icon_size_percent") == 0 ||
+                           strcmp(key, "folder_icon_size_2x2") == 0 ||
+                           strcmp(key, "folder_icon_size_2x2_9") == 0 ||
+                           strcmp(key, "folder_icon_size_1x2") == 0 ||
+                           strcmp(key, "folder_icon_size_2x1") == 0 ||
+                           strcmp(key, "folder_icon_size_4x2") == 0 ||
+                           strcmp(key, "folder_icon_size_4x2_6x3") == 0) {
+                    struct { const char *name; uint32_t bit; int *dst; } imap[] = {
+                        {"dock_icon_size_percent",    1u << 2, &c.dock_icon_size_percent},
+                        {"ws_icon_size_percent",      1u << 3, &c.ws_icon_size_percent},
+                        {"ws_dock_icon_size_percent", 1u << 4, &c.ws_dock_icon_size_percent},
+                        {"folder_icon_size_2x2",      1u << 5, &c.folder_icon_size_2x2},
+                        {"folder_icon_size_1x2",      1u << 6, &c.folder_icon_size_1x2},
+                        {"folder_icon_size_2x1",      1u << 7, &c.folder_icon_size_2x1},
+                        {"folder_icon_size_4x2",      1u << 8, &c.folder_icon_size_4x2},
+                        {"folder_icon_size_4x2_6x3",  1u << 9, &c.folder_icon_size_4x2_6x3},
+                        {"folder_icon_size_2x2_9",    1u << 10, &c.folder_icon_size_2x2_9},
+                    };
+                    for (size_t ii = 0; ii < sizeof(imap)/sizeof(imap[0]); ii++) {
+                        if (strcmp(key, imap[ii].name) == 0) {
+                            if ((extra_seen & imap[ii].bit) ||
+                                !ld_grid_parse_int(val, 70, 130, imap[ii].dst)) {
+                                bad = 1;
+                            } else {
+                                extra_seen |= imap[ii].bit;
+                            }
+                            break;
+                        }
+                    }
+                    if (bad) break;
                 } else if (strcmp(key, "ws_dock_custom") == 0 ||
                            strcmp(key, "ws_taskbar_mode") == 0 ||
                            strcmp(key, "ws_desktop_sync_normal") == 0) {
