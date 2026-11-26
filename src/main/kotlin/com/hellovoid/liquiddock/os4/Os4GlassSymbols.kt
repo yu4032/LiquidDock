@@ -192,6 +192,7 @@ internal object Os4GlassSymbols {
         val workstationJumpToPageTarget: String = "",
         val workstationPageFieldTargets: String = "",
         val folderLayoutSyncTargets: String = "",
+        val folderOpenFixTargets: String = "",
         val widgetCornerTarget: String = "",
         val folderBlurTarget: String = "",
         val shortcutBlurTargets: String = "",
@@ -329,6 +330,17 @@ internal object Os4GlassSymbols {
                 "FolderLayoutStrategy.getPreviewItemInfo",
             ),
         )
+        val folderOpenFixTargets = fromMiniElfSymbolSpecs(
+            mini,
+            listOf(
+                "FolderGridViewGetxController.folderCellWidth" to 64L,
+                "FolderGridViewGetxController.folderCellHeight" to 64L,
+                "FolderGridViewGetxController._calibrateItemCellHeight" to 512L,
+                "FolderClingGetxController.calGridItemPosition" to 512L,
+                "FolderClingGetxController.calcPositionForCellX" to 512L,
+                "FolderAnimController._refreshCachedGridParams" to 512L,
+            ),
+        )
         val widgetCornerTarget = fromMiniElfSingle(
             mini,
             "RoundedCornerEnforcementUtils.computeEnforcedRadius",
@@ -384,6 +396,7 @@ internal object Os4GlassSymbols {
             workstationJumpToPageTarget,
             workstationPageFieldTargets,
             folderLayoutSyncTargets,
+            folderOpenFixTargets,
             widgetCornerTarget,
             folderBlurTarget,
             shortcutBlurTargets,

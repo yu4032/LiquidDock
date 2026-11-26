@@ -333,6 +333,9 @@ struct ld_grid_conf {
     int folder_layout_sync_present;
     uint64_t folder_layout_sync_vaddr[5];
     size_t folder_layout_sync_size[5];
+    int folder_open_fix_present;
+    uint64_t folder_open_fix_vaddr[6];
+    size_t folder_open_fix_size[6];
 };
 
 static volatile int g_ws_is_laptop_mode __attribute__((used));
@@ -620,6 +623,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                            bit4=grid_cols bit5=grid_rows bit6=end */
     uint32_t divider_seen = 0;   /* 分隔线字段查重（定义见 divider_conf.h） */
     uint32_t ws_seen = 0;        /* 工作台字段查重 */
+    uint32_t extra_seen = 0;     /* 扩展字段查重 */
     int ok = 0;
     c.large_folder_glass = 1;
     c.large_folder_native_outline = 1;
@@ -1045,6 +1049,14 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.folder_layout_sync_present = 1;
                     ws_seen |= 1u << 31;
+                } else if (strcmp(key, "folder_open_fix_targets") == 0) {
+                    if ((extra_seen & (1u << 0)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.folder_open_fix_vaddr,
+                                                       c.folder_open_fix_size, 6, 8192)) {
+                        bad=1; break;
+                    }
+                    c.folder_open_fix_present = 1;
+                    extra_seen |= 1u << 0;
                 } else if (strcmp(key, "ws_dock_custom") == 0 ||
                            strcmp(key, "ws_taskbar_mode") == 0 ||
                            strcmp(key, "ws_desktop_sync_normal") == 0) {

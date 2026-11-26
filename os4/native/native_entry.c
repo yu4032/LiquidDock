@@ -169,6 +169,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "home_icons.h"
 #include "home_margins.h"
 #include "folder_layout_sync.h"
+#include "folder_open_fix.h"
 #include "safe_mode.h"
 #include "home_indicator.h"
 #include "home_widgets.h"
@@ -1573,6 +1574,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_glass_filter_hook_install(api);
     ld_home_margins_install(api,&lib);
     ld_folder_layout_sync_install(api,&lib);
+    ld_folder_open_fix_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (g_installed) { update_layout_ready(); return; }
 
@@ -2024,6 +2026,7 @@ static void ld_write_hook_status(void) {
             "folder_grid=%d\n"
             "folder_cols_ready=%d\n"
             "folder_rows_ready=%d\n"
+            "folder_open_fix=%d\n"
             "workstation=%d\n"
             "workstation_hooks=%d\n"
             "boot_glass=%d\n"
@@ -2050,6 +2053,7 @@ static void ld_write_hook_status(void) {
             home_margins_scopes, home_margins_dirs,
             big_folder_ok, widget_1x1_ok, ld_frb_adapter_ready(),
             folder_grid_ok, folder_cols_ready, folder_rows_ready,
+            g_fof.installed_count,
             workstation_ok, ws_hooks,
             boot_glass, boot_glass_icons, boot_glass_icon_radius, boot_glass_widgets,
             boot_grid, boot_dock, boot_divider, boot_recents,

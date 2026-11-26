@@ -251,6 +251,9 @@ object Os4ConfigSync {
                     if (resolvedTargets.folderLayoutSyncTargets.isNotEmpty()) {
                         append("folder_layout_sync_targets=").append(resolvedTargets.folderLayoutSyncTargets).append('\n')
                     }
+                    if (resolvedTargets.folderOpenFixTargets.isNotEmpty()) {
+                        append("folder_open_fix_targets=").append(resolvedTargets.folderOpenFixTargets).append('\n')
+                    }
                     if (resolvedTargets.widgetCornerTarget.isNotEmpty()) {
                         append("widget_corner_target=").append(resolvedTargets.widgetCornerTarget).append('\n')
                     }
