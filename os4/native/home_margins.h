@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "bootlog.h"
+#include "dart_heap.h"
 #include "native_api.h"
 #include "lib_base.h"
 #include "aot_scanner.h"
@@ -612,12 +613,12 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         double cw = base->cw - 2.0 * dh / (double)cols;
         double ox = base->ox + dh;
         if (isfinite(cw) && isfinite(ox) && cw > 1.0) {
-            if (cw_cur != cw) __builtin_memcpy((void *)(cfg + 0x2b), &cw, sizeof cw);
+            if (cw_cur != cw && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + 0x2b), &cw, sizeof cw);
             uintptr_t box = ld_hm_ptr(cfg, 0x3b, x28);
             if (box) {
                 double curx = 0;
                 __builtin_memcpy(&curx, (const void *)(box + 7), sizeof curx);
-                if (curx != ox) __builtin_memcpy((void *)(box + 7), &ox, sizeof ox);
+                if (curx != ox && !ld_dart_is_ro_addr(box)) __builtin_memcpy((void *)(box + 7), &ox, sizeof ox);
                 if ((dh != 0.0 || cw_cur != cw || curx != ox) && (n % 500u) == 0u)
                     ld_blog("home margin h mode=%d scope=%d dir=%d cols=%d dh=%.2f cw_in=%.2f ox_in=%.2f target=cw%.2f/ox%.2f",
                             mode_idx, scope, landscape, cols, dh, cw_cur, curx, cw, ox);
@@ -636,13 +637,13 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         if (isfinite(ch) && isfinite(oy) && ch > 1.0) {
             double ch_cur = 0;
             __builtin_memcpy(&ch_cur, (const void *)(cfg + 0x33), sizeof ch_cur);
-            if (ch_cur != ch) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
+            if (ch_cur != ch && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
             uintptr_t oybox = ld_hm_oy_box(x28, x26);
             /* The active-config listener publishes this inset to originY.
              * Keep it in sync so the next rotation publish sees the same value. */
             int publish_through_config = scope == 0 && oy_ok &&
-                (oy_now == oy || !ld_ws_is_const_ro(box0));
-            if (oy_ok && oy_now != oy && !ld_ws_is_const_ro(box0)) {
+                (oy_now == oy || !ld_dart_is_ro_addr(box0));
+            if (oy_ok && oy_now != oy && !ld_dart_is_ro_addr(box0)) {
                 __builtin_memcpy((void *)(box0 + 0xf), &oy, sizeof oy);
                 static unsigned reports;
                 if (reports++ < 32u)
@@ -656,7 +657,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                 /* The Launcher setter compares the old and new values before
                  * notifying layout listeners. Leave the old value intact so
                  * a normal desktop rotation can publish the new one. */
-                if (!publish_through_config && cury != oy)
+                if (!publish_through_config && cury != oy && !ld_dart_is_ro_addr(oybox))
                     __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
                 static int last_publish_dir = -1;
                 if (publish_through_config && landscape != last_publish_dir) {
@@ -686,7 +687,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         if (isfinite(ind)) {
             double ind_cur = 0;
             __builtin_memcpy(&ind_cur, (const void *)(cfg + 0x4b), sizeof ind_cur);
-            if (ind_cur != ind) __builtin_memcpy((void *)(cfg + 0x4b), &ind, sizeof ind);
+            if (ind_cur != ind && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + 0x4b), &ind, sizeof ind);
             if ((di != 0.0 || ind_cur != ind) && (n % 500u) == 0u)
                 ld_blog("home margin indicator mode=%d dir=%d ind %.2f->%.2f dy=%.1f",
                         mode_idx, landscape, base->ind, ind, di);

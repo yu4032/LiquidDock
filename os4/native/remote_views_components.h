@@ -130,7 +130,7 @@ __attribute__((used)) static void ld_observe_flutter_view(struct ld_dart_context
     }
     pthread_mutex_unlock(&g_rv_lock);
 
-    if (hide) {
+    if (hide && !ld_dart_is_ro_addr(props)) {
         uint32_t dart_null = (uint32_t)c->x[22];
         memcpy((void *)(props + g_rv_props_bg_override_off), &dart_null, 4);
         memcpy((void *)(props + g_rv_props_bg_default_off), &dart_null, 4);

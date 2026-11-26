@@ -188,7 +188,7 @@ static void ld_glass_scope_install(
     g_scope_dock_dark_start = dock_dark_start;
     g_scope_dock_dark_end = dock_dark_end;
 
-    uintptr_t recents = ld_resolve_sym_or_aot(
+    uintptr_t recents = g_orig_recents_glass_entry ? 0 : ld_resolve_sym_or_aot(
         lib, g_home_options.glass_scope_targets_present,
         g_home_options.glass_scope_vaddr[0], g_home_options.glass_scope_size[0],
         0x11de554u, ld_pat_recents_glass_build, 16, "glass_scope recents");
@@ -200,7 +200,7 @@ static void ld_glass_scope_install(
         g_scope_recents_start = recents;
         g_scope_recents_end = recents + span;
     }
-    uintptr_t folder_light = ld_resolve_sym_or_aot(
+    uintptr_t folder_light = g_orig_folder_light_gate ? 0 : ld_resolve_sym_or_aot(
         lib, g_home_options.glass_scope_targets_present,
         g_home_options.glass_scope_vaddr[1], g_home_options.glass_scope_size[1],
         0x11b26c0u, ld_pat_folder_light_build, 20, "glass_scope folder_light");
@@ -213,38 +213,46 @@ static void ld_glass_scope_install(
         g_scope_folder_light_end = folder_light + span;
     }
 
-    uintptr_t build_filter = ld_resolve_sym_or_aot(
+    uintptr_t build_filter = g_orig_glass_widget_build_filter ? 0 : ld_resolve_sym_or_aot(
         lib, g_home_options.glass_scope_targets_present,
         g_home_options.glass_scope_vaddr[2], g_home_options.glass_scope_size[2],
         0x12e8730u, ld_pat_glass_widget_build_filter, 20, "glass_scope build_filter");
-    uintptr_t hyper_glass = ld_resolve_sym_or_aot(
+    uintptr_t hyper_glass = g_orig_hyper_glass_build ? 0 : ld_resolve_sym_or_aot(
         lib, g_home_options.glass_scope_targets_present,
         g_home_options.glass_scope_vaddr[3], g_home_options.glass_scope_size[3],
         0x12d148cu, ld_pat_hyper_glass_build, 16, "glass_scope hyper_glass");
 
     int ok = 0;
-    if (v7_entry && !g_orig_glass_v7_entry && ld_hook_site_safe(v7_entry, "glass_v7")) {
+    if (g_orig_glass_v7_entry) {
+        ok++;
+    } else if (v7_entry && ld_hook_site_safe(v7_entry, "glass_v7")) {
         if (api->hook((void *)v7_entry, (void *)repl_glass_v7_entry, &g_orig_glass_v7_entry) == 0 &&
             g_orig_glass_v7_entry) {
             ld_pin_code_pages_soft(v7_entry, 16);
             ok++;
         }
     }
-    if (build_filter && !g_orig_glass_widget_build_filter && ld_hook_site_safe(build_filter, "build_filter")) {
+    if (g_orig_glass_widget_build_filter) {
+        ok++;
+    } else if (build_filter && ld_hook_site_safe(build_filter, "build_filter")) {
         if (api->hook((void *)build_filter, (void *)repl_glass_widget_build_filter, &g_orig_glass_widget_build_filter) == 0 &&
             g_orig_glass_widget_build_filter) {
             ld_pin_code_pages_soft(build_filter, 16);
             ok++;
         }
     }
-    if (build_folder_glass && !g_orig_build_folder_glass && ld_hook_site_safe(build_folder_glass, "build_folder_glass")) {
+    if (g_orig_build_folder_glass) {
+        ok++;
+    } else if (build_folder_glass && ld_hook_site_safe(build_folder_glass, "build_folder_glass")) {
         if (api->hook((void *)build_folder_glass, (void *)repl_build_folder_glass, &g_orig_build_folder_glass) == 0 &&
             g_orig_build_folder_glass) {
             ld_pin_code_pages_soft(build_folder_glass, 16);
             ok++;
         }
     }
-    if (folder_light && !g_orig_folder_light_gate && ld_hook_site_safe(folder_light, "folder_light")) {
+    if (g_orig_folder_light_gate) {
+        ok++;
+    } else if (folder_light && ld_hook_site_safe(folder_light, "folder_light")) {
         uintptr_t gate = folder_light;
         if (api->hook((void *)gate, (void *)repl_folder_light_gate, &g_orig_folder_light_gate) == 0 &&
             g_orig_folder_light_gate) {
@@ -267,7 +275,8 @@ static void ld_glass_scope_install(
 
     g_glass_scope_installed = (ok >= 4);
     ld_blog("OS4 glass scope hooks installed=%d/4 (v7=%d bf=%d bfg=%d fl=%d)",
-            ok, v7_entry != 0, build_filter != 0, build_folder_glass != 0, folder_light != 0);
+            ok, g_orig_glass_v7_entry != NULL, g_orig_glass_widget_build_filter != NULL,
+            g_orig_build_folder_glass != NULL, g_orig_folder_light_gate != NULL);
 }
 
 #endif

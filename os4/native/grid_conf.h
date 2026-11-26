@@ -346,11 +346,15 @@ struct ld_grid_conf {
     uint64_t folder_open_fix_vaddr[6];
     size_t folder_open_fix_size[6];
     int dock_icon_size_target_present;
-    uint64_t dock_icon_size_vaddr;
-    size_t dock_icon_size_size;
+    size_t dock_icon_size_target_count;
+    uint64_t dock_icon_size_vaddr[8];
+    size_t dock_icon_size_size[8];
     int folder_preview_dim_present;
     uint64_t folder_preview_dim_vaddr[2];
     size_t folder_preview_dim_size[2];
+    int folder_title_anim_present;
+    uint64_t folder_title_anim_vaddr[5];
+    size_t folder_title_anim_size[5];
 };
 
 static volatile int g_ws_is_laptop_mode __attribute__((used));
@@ -1082,12 +1086,15 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     c.folder_open_fix_present = 1;
                     extra_seen |= 1u << 0;
                 } else if (strcmp(key, "dock_icon_size_target") == 0) {
-                    if ((extra_seen & (1u << 1)) ||
-                        !ld_grid_parse_aot_targets(val, &c.dock_icon_size_vaddr,
-                                                   &c.dock_icon_size_size, 1)) {
+                    size_t n = 1;
+                    for (const char *q = val; *q; q++) if (*q == ',') n++;
+                    if (n > 8 || (extra_seen & (1u << 1)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.dock_icon_size_vaddr,
+                                                       c.dock_icon_size_size, n, 4096)) {
                         bad=1; break;
                     }
                     c.dock_icon_size_target_present = 1;
+                    c.dock_icon_size_target_count = n;
                     extra_seen |= 1u << 1;
                 } else if (strcmp(key, "folder_preview_dim_targets") == 0) {
                     if ((extra_seen & (1u << 11)) ||
@@ -1097,6 +1104,14 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.folder_preview_dim_present = 1;
                     extra_seen |= 1u << 11;
+                } else if (strcmp(key, "folder_title_anim_targets") == 0) {
+                    if ((extra_seen & (1u << 15)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.folder_title_anim_vaddr,
+                                                       c.folder_title_anim_size, 5, 65536)) {
+                        bad=1; break;
+                    }
+                    c.folder_title_anim_present = 1;
+                    extra_seen |= 1u << 15;
                 } else if (strcmp(key, "dock_icon_size_percent") == 0 ||
                            strcmp(key, "ws_icon_size_percent") == 0 ||
                            strcmp(key, "ws_dock_icon_size_percent") == 0 ||

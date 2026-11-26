@@ -48,7 +48,7 @@ __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_cont
     /* 实验 B：只隐藏 Dock 背景（宽高置 0），保留布局与图标。 */
     if (access("/data/user_de/0/com.miui.home/files/liquiddock-dockbg-hide", F_OK) == 0) {
         uintptr_t params=c->x[2],size=ld_heap_pointer(c,params,7);
-        if(!size) return;
+        if(!size || ld_dart_is_ro_addr(size)) return;
         double zero=0.0;
         memcpy((void *)(size+7),&zero,8); memcpy((void *)(size+0xf),&zero,8);
         static unsigned hide_logs;
@@ -86,14 +86,18 @@ __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_cont
             || !ld_dock_background(&g_home_options.dock,&width,&height,&corner)) return;
     /* Fresh params, before equality comparison and publication to the native
      * background animation. Workspace reserves and icon sizes stay untouched. */
-    memcpy((void *)(size+7),&width,8); memcpy((void *)(size+0xf),&height,8);
-    memcpy((void *)(params+0xb),&corner,8);
+    if (!ld_dart_is_ro_addr(size)) {
+        memcpy((void *)(size+7),&width,8); memcpy((void *)(size+0xf),&height,8);
+    }
+    if (!ld_dart_is_ro_addr(params)) {
+        memcpy((void *)(params+0xb),&corner,8);
+    }
 }
 __attribute__((used)) static void ld_observe_dock_spacing(struct ld_dart_context *c)
 {
     if(!ld_dock_active(c) || g_home_options.dock.spacing==0) return;
     uintptr_t size=c->x[0]; double width=0;
-    if(!(size&1) || !ld_read_heap(size+7,&width,8)) return;
+    if(!(size&1) || ld_dart_is_ro_addr(size) || !ld_read_heap(size+7,&width,8)) return;
     /* Legacy item decoration adds the configured distance to BOTH sides.
      * This Size is newly allocated on every _defaultIconSize invocation. */
     width+=2*g_home_options.dock.spacing;
@@ -153,7 +157,7 @@ __attribute__((used)) static void ld_observe_dock_container_height(struct ld_dar
     double dh = ld_dock_effective_height_delta(c);
     if(dh<=0) return;
     uintptr_t box=c->x[2]; double height;
-    if(!(box&1) || !ld_read_heap(box+7,&height,8)) return;
+    if(!(box&1) || ld_dart_is_ro_addr(box) || !ld_read_heap(box+7,&height,8)) return;
     height+=dh;
     if(isfinite(height)) memcpy((void *)(box+7),&height,8);
 }

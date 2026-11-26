@@ -1069,6 +1069,243 @@ static uintptr_t ld_find_sysa(const ld_lib_info *lib, uintptr_t sysb_rt)
     return 0;
 }
 
+static bool ld_icon_is_dart_prologue(uintptr_t addr)
+{
+    if (!executable_range(addr, 8u)) return false;
+    const uint32_t *w = (const uint32_t *)addr;
+    return w[0] == 0xa9bf79fdu && w[1] == 0xaa0f03fdu;
+}
+
+static uintptr_t ld_icon_find_sysb(uintptr_t common_rt)
+{
+    if (!common_rt) return 0;
+    const size_t word_count = sizeof ld_pat_sys_radius / sizeof(uint32_t);
+    /* Scan forward from common_rt for the adjacent radius closure (was fixed +0x2c0). */
+    for (size_t off = 0x180u; off <= 0x480u; off += 4u) {
+        uintptr_t cand = common_rt + off;
+        if (executable_range(cand, sizeof ld_pat_sys_radius) &&
+            ld_aot_match_words((const uint32_t *)cand, ld_pat_sys_radius, word_count)) {
+            return cand;
+        }
+    }
+    return 0;
+}
+
+static bool ld_icon_find_closure_bfg(uintptr_t sysb_rt,
+                                     uint32_t *out_pool_add,
+                                     uint32_t *out_pool_ldr,
+                                     uintptr_t *out_bfg)
+{
+    if (!sysb_rt) return false;
+    /* Find the closure immediately following sysb_rt's `ret` (0xd65f03c0). */
+    uintptr_t closure = 0;
+    for (size_t off = 0x140u; off <= 0x260u; off += 4u) {
+        uintptr_t p = sysb_rt + off;
+        if (!executable_range(p, 12u)) break;
+        const uint32_t *w = (const uint32_t *)p;
+        if (w[0] == 0xd65f03c0u && w[1] == 0xa9bf79fdu && w[2] == 0xaa0f03fdu) {
+            closure = p + 4u;
+            break;
+        }
+    }
+    if (!closure || !executable_range(closure, 0xc0u)) return false;
+    const uint32_t *cw = (const uint32_t *)closure;
+    /* Match:
+     *   add x4, x27, #imm, lsl #12   ((w & 0xffc003ff) == 0x91400364)
+     *   ldr x4, [x4, #uimm]          ((w & 0xffc003ff) == 0xf9400084)
+     *   bl  FolderBlurUtils.buildFolderGlass
+     *   b   epilogue
+     */
+    for (size_t i = 4u; i + 3u < 0xc0u / 4u; i++) {
+        if ((cw[i] & 0xffc003ffu) == 0x91400364u &&
+            (cw[i + 1] & 0xffc003ffu) == 0xf9400084u &&
+            (cw[i + 2] & 0xfc000000u) == 0x94000000u &&
+            (cw[i + 3] & 0xfc000000u) == 0x14000000u) {
+            int32_t imm26 = (int32_t)(cw[i + 2] & 0x03ffffffu);
+            if (imm26 & 0x02000000) imm26 |= (int32_t)0xfc000000;
+            uintptr_t bl_pc = closure + (i + 2u) * 4u;
+            uintptr_t bfg = (uintptr_t)((intptr_t)bl_pc + ((intptr_t)imm26 << 2));
+            if (ld_icon_is_dart_prologue(bfg)) {
+                if (out_pool_add) *out_pool_add = cw[i];
+                if (out_pool_ldr) *out_pool_ldr = cw[i + 1];
+                if (out_bfg) *out_bfg = bfg;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static uintptr_t ld_icon_find_child_site(uintptr_t sys_rt, uint32_t pool_add)
+{
+    if (!sys_rt || !executable_range(sys_rt, 0x200u)) return 0;
+    for (size_t off = 0x110u; off <= 0x1b0u; off += 4u) {
+        uintptr_t cand = sys_rt + off;
+        if (!executable_range(cand, LD_ICON_GLASS_CHILD_WORDS * 4u)) break;
+        const uint32_t *w = (const uint32_t *)cand;
+        if ((pool_add && w[0] == pool_add && w[3] == 0xf81f83a0u && w[4] == 0x14000005u) ||
+            ld_aot_match_words(w, ld_pat_child_orig, 9u)) {
+            return cand;
+        }
+    }
+    return 0;
+}
+
+static uintptr_t ld_icon_find_radius_site(uintptr_t sys_rt)
+{
+    if (!sys_rt || !executable_range(sys_rt, 0x180u)) return 0;
+    const uint32_t *w = (const uint32_t *)sys_rt;
+    for (size_t i = 0x20u; i + 4u < 0x180u / 4u; i++) {
+        if (w[i] == 0xd2800041u && /* mov x1, #2 */
+            (w[i + 1] & 0xfc000000u) == 0x94000000u && /* bl */
+            (w[i + 2] & 0xffe00fffu) == 0xfc0003a0u && /* stur d0, [x29, #-imm] */
+            (w[i + 3] & 0xfc000000u) == 0x94000000u && /* bl */
+            (w[i + 4] & 0xffe00fffu) == 0xfc4003a0u) { /* ldur d0, [x29, #-imm] */
+            return sys_rt + (i + 2u) * 4u;
+        }
+    }
+    return 0;
+}
+
+static uintptr_t ld_icon_find_body_flag_site(uintptr_t body_rt)
+{
+    if (!body_rt || !executable_range(body_rt, 0xc0u)) return 0;
+    const uint32_t *w = (const uint32_t *)body_rt;
+    for (size_t i = 4u; i + 3u < 0xc0u / 4u; i++) {
+        if ((w[i] & 0xfc000000u) == 0x94000000u && /* bl */
+            w[i + 1] == 0xaa0003e2u && /* mov x2, x0 */
+            w[i + 2] == 0xf85f83a0u && /* ldur x0, [x29, #-8] */
+            w[i + 3] == 0xf81f03a2u) { /* stur x2, [x29, #-16] */
+            return body_rt + (i + 1u) * 4u;
+        }
+    }
+    return 0;
+}
+
+static uintptr_t ld_icon_find_body_size_site(uintptr_t body_rt)
+{
+    if (!body_rt || !executable_range(body_rt, 0x240u)) return 0;
+    const uint32_t *w = (const uint32_t *)body_rt;
+    for (size_t i = 0x30u; i + 1u < 0x240u / 4u; i++) {
+        if (w[i] == 0xfc5c03a1u && /* ldur d1, [x29, #-0x40] */
+            w[i + 1] == 0xfc5b83a0u) { /* ldur d0, [x29, #-0x48] */
+            return body_rt + i * 4u;
+        }
+    }
+    return 0;
+}
+
+static bool ld_icon_find_ble_bypass(uintptr_t fn_rt, size_t max_bytes,
+                                    uintptr_t *out_site, uint32_t *out_old, uint32_t *out_new)
+{
+    if (!fn_rt || !executable_range(fn_rt, max_bytes)) return false;
+    const uint32_t *w = (const uint32_t *)fn_rt;
+    size_t n = max_bytes / 4u;
+    for (size_t i = 4u; i + 2u < n; i++) {
+        if ((w[i] & 0xffe00fffu) == 0xf8400041u && /* ldur x1, [x2, #imm] */
+            w[i + 1] == 0xf100003fu) { /* cmp x1, #0 */
+            uint32_t br = w[i + 2];
+            if ((br & 0xff00001fu) == 0x5400000du) { /* b.le <target> */
+                int32_t imm19 = (int32_t)((br >> 5) & 0x7ffffu);
+                if (imm19 & 0x40000) imm19 -= 0x80000;
+                *out_site = fn_rt + (i + 2u) * 4u;
+                *out_old = br;
+                *out_new = 0x14000000u | ((uint32_t)imm19 & 0x03ffffffu);
+                return true;
+            }
+            if ((br & 0xfc000000u) == 0x14000000u) { /* already patched to b */
+                *out_site = fn_rt + (i + 2u) * 4u;
+                *out_old = br;
+                *out_new = br;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool ld_icon_find_rad_branch(uintptr_t fn_rt, size_t max_bytes,
+                                    uintptr_t *out_site, uint32_t *out_old, uint32_t *out_new)
+{
+    if (!fn_rt || !executable_range(fn_rt, max_bytes)) return false;
+    const uint32_t *w = (const uint32_t *)fn_rt;
+    size_t n = max_bytes / 4u;
+    for (size_t i = 8u; i + 2u < n; i++) {
+        if (w[i] == 0xf85f03a0u && /* ldur x0, [x29, #-0x10] */
+            w[i + 1] == 0xfc1b83a0u && /* stur d0, [x29, #-0x48] */
+            ((w[i + 2] & 0xfff8001fu) == 0x37200000u || w[i + 2] == 0xd503201fu)) {
+            *out_site = fn_rt + (i + 2u) * 4u;
+            *out_old = w[i + 2];
+            *out_new = 0xd503201fu; /* nop */
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ld_icon_find_scale_site(uintptr_t fn_rt, size_t max_bytes,
+                                    uintptr_t *out_site, uint32_t *out_old, uint32_t *out_new)
+{
+    if (!fn_rt || !executable_range(fn_rt, max_bytes)) return false;
+    const uint32_t *w = (const uint32_t *)fn_rt;
+    size_t n = max_bytes / 4u;
+    for (size_t i = 0x20u; i + 2u < n; i++) {
+        if (w[i] == 0xf85e83a0u && /* ldur x0, [x29, #-0x18] */
+            (w[i + 1] == 0xfc407000u || w[i + 1] == 0x1e6e1000u) &&
+            w[i + 2] == 0xfc1c03a0u) { /* stur d0, [x29, #-0x40] */
+            *out_site = fn_rt + (i + 1u) * 4u;
+            *out_old = w[i + 1];
+            *out_new = 0x1e6e1000u; /* fmov d0, #1.0 */
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ld_icon_find_opacity_site(uintptr_t fn_rt, size_t max_bytes,
+                                      uintptr_t *out_site, uint32_t *out_old, uint32_t *out_new)
+{
+    if (!fn_rt || !executable_range(fn_rt, max_bytes)) return false;
+    const uint32_t *w = (const uint32_t *)fn_rt;
+    size_t n = max_bytes / 4u;
+    for (size_t i = 0x20u; i + 2u < n; i++) {
+        if (w[i] == 0xf85d83a1u && /* ldur x1, [x29, #-0x28] */
+            (w[i + 1] == 0xfc407020u || w[i + 1] == 0x1e6e1000u) &&
+            w[i + 2] == 0xfc027000u) { /* stur d0, [x0, #0x27] */
+            *out_site = fn_rt + (i + 1u) * 4u;
+            *out_old = w[i + 1];
+            *out_new = 0x1e6e1000u; /* fmov d0, #1.0 */
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ld_icon_find_sys_rad_check(uintptr_t sys_rt,
+                                       uintptr_t *out_site, uint32_t *out_old, uint32_t *out_new)
+{
+    if (!sys_rt || !executable_range(sys_rt, 0x100u)) return false;
+    const uint32_t *w = (const uint32_t *)sys_rt;
+    size_t n = 0x100u / 4u;
+    for (size_t i = 8u; i + 4u < n; i++) {
+        if (w[i] == 0xf9400ba0u && /* ldr x0, [x29, #0x10] */
+            w[i + 1] == 0xf81f83a1u && /* stur x1, [x29, #-8] */
+            ((w[i + 2] & 0xfff8001fu) == 0x37200000u || (w[i + 2] & 0xfc000000u) == 0x14000000u)) {
+            /* Find the early-return `ret` (0xd65f03c0); jump target is right after `ret`. */
+            for (size_t j = i + 3u; j + 1u < n && j <= i + 24u; j++) {
+                if (w[j] == 0xd65f03c0u) {
+                    int32_t delta = (int32_t)((j + 1u) - (i + 2u));
+                    *out_site = sys_rt + (i + 2u) * 4u;
+                    *out_old = w[i + 2];
+                    *out_new = 0x14000000u | ((uint32_t)delta & 0x03ffffffu);
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 static void ld_install_icon_materials(const struct native_api *api,const ld_lib_info *lib)
 {
     if(!LD_PIN_ICON_GLASS) { (void)api; (void)lib; return; }
@@ -1102,30 +1339,30 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
         g_home_options.icon_glass_vaddr[2], g_home_options.icon_glass_size[2], 0x100u,
         0x1789758u, ld_pat_body, 24, "icon glass body");
     if (!body_rt && bdi_rt) {
-        uintptr_t cand = bdi_rt + 0x238u;
-        if (executable_range(cand, sizeof ld_pat_body) &&
-            ld_aot_match_words((const uint32_t *)cand, ld_pat_body, 48)) {
-            body_rt = cand;
-            ld_blog("AOT pattern relocated (bdi+0x238): hint 0x1789758 -> live 0x%lx (vaddr 0x%lx)",
-                    (unsigned long)body_rt, (unsigned long)(body_rt - lib->elf_base));
+        for (size_t off = 0x180u; off <= 0x380u; off += 4u) {
+            uintptr_t cand = bdi_rt + off;
+            if (executable_range(cand, sizeof ld_pat_body) &&
+                ld_aot_match_words((const uint32_t *)cand, ld_pat_body, 48)) {
+                body_rt = cand;
+                ld_blog("AOT pattern relocated (bdi+0x%zx): live 0x%lx (vaddr 0x%lx)",
+                        off, (unsigned long)body_rt, (unsigned long)(body_rt - lib->elf_base));
+                break;
+            }
         }
     }
-    uintptr_t sysb_rt = common_rt ? (common_rt + 0x2c0u) : 0;
+    uintptr_t sysb_rt = ld_icon_find_sysb(common_rt);
     uintptr_t sysa_rt = sysb_rt ? ld_find_sysa(lib, sysb_rt) : 0;
 
+    uint32_t bfg_pool_add = 0, bfg_pool_ldr = 0;
+    uintptr_t bfg_fn = 0;
+    bool bfg_ok = ld_icon_find_closure_bfg(sysb_rt, &bfg_pool_add, &bfg_pool_ldr, &bfg_fn);
     if (sysb_rt && !g_scope_build_folder_glass) {
         g_scope_sysa_start = sysa_rt;
         g_scope_sysa_end = sysa_rt ? sysa_rt + 0x300u : 0;
         g_scope_sysb_start = sysb_rt;
         g_scope_sysb_end = sysb_rt + 0x300u;
-        uintptr_t bfg_closure = sysb_rt + 0x1a8u;
-        if (executable_range(bfg_closure, 0x60)) {
-            uint32_t bl_raw = *(volatile uint32_t *)(bfg_closure + 0x5cu);
-            if ((bl_raw & 0xfc000000u) == 0x94000000u) {
-                int32_t imm26 = (int32_t)(bl_raw & 0x03ffffffu);
-                if (imm26 & 0x02000000) imm26 |= (int32_t)0xfc000000;
-                g_scope_build_folder_glass = (bfg_closure + 0x5cu) + ((uintptr_t)imm26 << 2);
-            }
+        if (bfg_ok && bfg_fn) {
+            g_scope_build_folder_glass = bfg_fn;
         }
     }
 
@@ -1137,7 +1374,14 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
 
     if(!g_icon_glass_installed) {
         ld_resolve_icon_field_offsets(bdi_rt, body_rt);
-        uintptr_t sites[2] = { body_rt + 0x4cu, body_rt + 0x178u };
+        uintptr_t flag_site = ld_icon_find_body_flag_site(body_rt);
+        uintptr_t size_site = ld_icon_find_body_size_site(body_rt);
+        if (!flag_site || !size_site) {
+            ld_blog("icon glass body sites unavailable: flag=%p size=%p body=%p",
+                    (void *)flag_site, (void *)size_site, (void *)body_rt);
+            return;
+        }
+        uintptr_t sites[2] = { flag_site, size_site };
         void *const replacements[] = { (void*)repl_icon_glass_enabled, (void*)repl_icon_glass_size };
         void **const originals[] = { &g_orig_icon_glass_enabled, &g_orig_icon_glass_size };
         for (size_t i = 0; i < 2; i++) {
@@ -1153,7 +1397,8 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
         }
         if (g_orig_icon_glass_enabled && g_orig_icon_glass_size) {
             g_icon_glass_installed = 1;
-            ld_blog("icon glass hooks installed dynamically at body=%p", (void *)body_rt);
+            ld_blog("icon glass hooks installed dynamically at body=%p (flag=+0x%zx size=+0x%zx)",
+                    (void *)body_rt, (size_t)(flag_site - body_rt), (size_t)(size_site - body_rt));
         }
     }
     if (g_icon_glass_installed && bdi_rt && !g_orig_icon_glass_bdi && ld_pin_code_pages_soft(bdi_rt, 16)) {
@@ -1212,11 +1457,11 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     }
     if(g_icon_glass_installed && g_home_options.glass_icon_corner > 0.0 && !g_icon_glass_radius_installed) {
         struct { uintptr_t site; void *replace; void **orig; } rad[] = {
-            { sysb_rt + 0x118u, (void*)repl_icon_glass_radius, &g_orig_icon_glass_radius },
-            { sysa_rt + 0x118u, (void*)repl_icon_glass_radius_b, &g_orig_icon_glass_radius_b },
+            { ld_icon_find_radius_site(sysb_rt), (void*)repl_icon_glass_radius, &g_orig_icon_glass_radius },
+            { ld_icon_find_radius_site(sysa_rt), (void*)repl_icon_glass_radius_b, &g_orig_icon_glass_radius_b },
         };
         for (size_t i = 0; i < 2; i++) {
-            if (*rad[i].orig) continue;
+            if (*rad[i].orig || !rad[i].site) continue;
             void *backup = NULL;
             if (ld_pin_code_pages_soft(rad[i].site, 16) &&
                 api->hook((void*)rad[i].site, rad[i].replace, &backup) == 0 && backup) {
@@ -1233,18 +1478,29 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             uint32_t expected;
             uint32_t patch;
             const char *name;
-        } container_bypass[] = {
-            { bdi_rt ? (bdi_rt + 0xd0u) : 0, LD_ICON_GLASS_CONTAINER_A_OLD, LD_ICON_GLASS_CONTAINER_A_NEW, "buildDesktopIcon" },
-            { wrap_rt ? (wrap_rt + 0x68u) : 0, LD_ICON_GLASS_CONTAINER_B_OLD, LD_ICON_GLASS_CONTAINER_B_NEW, "wrapWithFolderCreateAnim" },
-            { body_rt + 0x130u, LD_ICON_GLASS_BODY_RADIUS_BRANCH_OLD, LD_ICON_GLASS_BODY_RADIUS_BRANCH_NEW, "body_radius_branch" },
-            { body_rt + 0x200u, LD_ICON_GLASS_BODY_SCALE_OLD, LD_ICON_GLASS_BODY_SCALE_NEW, "body_scale_1.0" },
-            { body_rt + 0x220u, LD_ICON_GLASS_BODY_OPACITY_OLD, LD_ICON_GLASS_BODY_OPACITY_NEW, "body_opacity_1.0" },
-            { common_rt + 0xc8u, LD_ICON_GLASS_COMMON_RADIUS_BRANCH_OLD, LD_ICON_GLASS_COMMON_RADIUS_BRANCH_NEW, "common_radius_branch" },
-            { common_rt + 0x184u, LD_ICON_GLASS_COMMON_SCALE_OLD, LD_ICON_GLASS_COMMON_SCALE_NEW, "common_scale_1.0" },
-            { common_rt + 0x1a4u, LD_ICON_GLASS_COMMON_OPACITY_OLD, LD_ICON_GLASS_COMMON_OPACITY_NEW, "common_opacity_1.0" },
-            { sysa_rt + 0x68u, LD_ICON_GLASS_A_RADIUS_CHECK_OLD, LD_ICON_GLASS_A_RADIUS_CHECK_NEW, "a_radius_check_bypass" },
-            { sysb_rt + 0x68u, LD_ICON_GLASS_B_RADIUS_CHECK_OLD, LD_ICON_GLASS_B_RADIUS_CHECK_NEW, "b_radius_check_bypass" },
+        } container_bypass[10] = {
+            { 0, 0, 0, "buildDesktopIcon" },
+            { 0, 0, 0, "wrapWithFolderCreateAnim" },
+            { 0, 0, 0, "body_radius_branch" },
+            { 0, 0, 0, "body_scale_1.0" },
+            { 0, 0, 0, "body_opacity_1.0" },
+            { 0, 0, 0, "common_radius_branch" },
+            { 0, 0, 0, "common_scale_1.0" },
+            { 0, 0, 0, "common_opacity_1.0" },
+            { 0, 0, 0, "a_radius_check_bypass" },
+            { 0, 0, 0, "b_radius_check_bypass" },
         };
+        ld_icon_find_ble_bypass(bdi_rt, 0x1c0u, &container_bypass[0].target, &container_bypass[0].expected, &container_bypass[0].patch);
+        ld_icon_find_ble_bypass(wrap_rt, 0x120u, &container_bypass[1].target, &container_bypass[1].expected, &container_bypass[1].patch);
+        ld_icon_find_rad_branch(body_rt, 0x1e0u, &container_bypass[2].target, &container_bypass[2].expected, &container_bypass[2].patch);
+        ld_icon_find_scale_site(body_rt, 0x2c0u, &container_bypass[3].target, &container_bypass[3].expected, &container_bypass[3].patch);
+        ld_icon_find_opacity_site(body_rt, 0x2c0u, &container_bypass[4].target, &container_bypass[4].expected, &container_bypass[4].patch);
+        ld_icon_find_rad_branch(common_rt, 0x1a0u, &container_bypass[5].target, &container_bypass[5].expected, &container_bypass[5].patch);
+        ld_icon_find_scale_site(common_rt, 0x260u, &container_bypass[6].target, &container_bypass[6].expected, &container_bypass[6].patch);
+        ld_icon_find_opacity_site(common_rt, 0x260u, &container_bypass[7].target, &container_bypass[7].expected, &container_bypass[7].patch);
+        ld_icon_find_sys_rad_check(sysa_rt, &container_bypass[8].target, &container_bypass[8].expected, &container_bypass[8].patch);
+        ld_icon_find_sys_rad_check(sysb_rt, &container_bypass[9].target, &container_bypass[9].expected, &container_bypass[9].patch);
+
         int patched_count = 0;
         for (size_t i = 0; i < sizeof container_bypass / sizeof *container_bypass; i++) {
             uintptr_t target = container_bypass[i].target;
@@ -1272,40 +1528,31 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             }
         }
 
-        /* Dynamically extract buildFolderGlass from sysb closure */
-        uintptr_t closure = sysb_rt + 0x1a8u;
-        if (executable_range(closure, 0x60)) {
-            uint32_t pool_add = *(volatile uint32_t *)(closure + 0x54u);
-            uint32_t pool_ldr = *(volatile uint32_t *)(closure + 0x58u);
-            uint32_t bl_raw = *(volatile uint32_t *)(closure + 0x5cu);
-            int32_t imm26 = (int32_t)(bl_raw & 0x03ffffffu);
-            if (imm26 & 0x02000000) imm26 |= (int32_t)0xfc000000;
-            uintptr_t build_folder_glass = (closure + 0x5cu) + ((uintptr_t)imm26 << 2);
+        /* Dynamically extracted buildFolderGlass from sysb closure */
+        if (bfg_ok && bfg_fn) {
             g_scope_sysa_start = sysa_rt;
             g_scope_sysa_end = sysa_rt ? sysa_rt + 0x300u : 0;
             g_scope_sysb_start = sysb_rt;
             g_scope_sysb_end = sysb_rt ? sysb_rt + 0x300u : 0;
-            if (!g_scope_build_folder_glass) g_scope_build_folder_glass = build_folder_glass;
+            if (!g_scope_build_folder_glass) g_scope_build_folder_glass = bfg_fn;
 
             struct {
                 uintptr_t site;
                 const char *sys_name;
             } child_sites[] = {
-                { sysa_rt + 0x150u, "SysA" },
-                { sysb_rt + 0x150u, "SysB" },
+                { ld_icon_find_child_site(sysa_rt, bfg_pool_add), "SysA" },
+                { ld_icon_find_child_site(sysb_rt, bfg_pool_add), "SysB" },
             };
             for (size_t s = 0; s < 2; s++) {
                 uintptr_t site = child_sites[s].site;
-                if (!executable_range(site, LD_ICON_GLASS_CHILD_WORDS * 4)) continue;
-                bool already_patched = (*(volatile uint32_t *)site == pool_add);
-                if (!already_patched && !ld_aot_match_words((const uint32_t *)site, ld_pat_child_orig, 9)) {
-                    ld_blog("icon glass %s child orig mismatch at %p; skipping", child_sites[s].sys_name, (void *)site);
+                if (!site || !executable_range(site, LD_ICON_GLASS_CHILD_WORDS * 4)) {
+                    ld_blog("icon glass %s child site unavailable; skipping", child_sites[s].sys_name);
                     continue;
                 }
-                int32_t delta = (int32_t)((intptr_t)build_folder_glass - (intptr_t)(site + 2 * 4)) >> 2;
+                int32_t delta = (int32_t)((intptr_t)bfg_fn - (intptr_t)(site + 2 * 4)) >> 2;
                 uint32_t bl_call = 0x94000000u | ((uint32_t)delta & 0x03ffffffu);
                 uint32_t new_words[LD_ICON_GLASS_CHILD_WORDS] = {
-                    pool_add, pool_ldr, bl_call,
+                    bfg_pool_add, bfg_pool_ldr, bl_call,
                     0xf81f83a0u, /* stur x0, [x29, #-8] */
                     0x14000005u, /* b #+0x14 */
                     0xd503201fu, 0xd503201fu, 0xd503201fu, 0xd503201fu
@@ -1327,12 +1574,15 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
                     }
                 }
             }
+        } else {
+            ld_blog("icon glass buildFolderGlass closure decode failed at sysb=%p; skipping child patches", (void *)sysb_rt);
         }
 
         int total_expected = (int)(sizeof container_bypass / sizeof *container_bypass + 2 * LD_ICON_GLASS_CHILD_WORDS);
         if (patched_count == total_expected) {
             g_icon_glass_container_patched = 1;
-            ld_blog("icon glass material & container patches all %d sites OK", patched_count);
+            ld_blog("icon glass material & container patches all %d sites OK (bfg=0x%lx)",
+                    patched_count, (unsigned long)(bfg_fn ? bfg_fn - lib->elf_base : 0));
         } else {
             ld_blog("icon glass material & container patches partial: %d/%d", patched_count, total_expected);
         }

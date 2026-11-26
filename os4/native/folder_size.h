@@ -2,6 +2,7 @@
 #define LIQUIDDOCK_FOLDER_SIZE_H
 
 #include "dart_heap.h"
+#include "dart_observer.h"
 #include "folder_size_policy.h"
 #include "folder_preview_inset.h"
 #include "home_widget_bridge.h"
@@ -82,6 +83,249 @@ LD_DART_ROUTED_OBSERVER(repl_percent_height, ld_observe_percent_height)
 
 static void *g_orig_folder_title_visibility;
 static int g_show_big_folder_title;
+static void *g_orig_folder_open_title;
+static void *g_orig_folder_start_anim_title;
+static uintptr_t g_fn_set_is_hide_title;
+static size_t g_cling_icon_ctrl_off;
+static size_t g_icon_model_off;
+static size_t g_icon_hide_rx_off;
+static size_t g_icon_opacity_off;
+static size_t g_set_hide_arg_pp_off;
+static size_t g_sentinel_pp_off;
+
+static inline uintptr_t ld_ft_decode_bl(uintptr_t pc, uint32_t w)
+{
+    if ((w & 0xfc000000u) != 0x94000000u) return 0;
+    int32_t imm26 = (int32_t)(w & 0x03ffffffu);
+    if (imm26 & 0x02000000) imm26 |= (int32_t)0xfc000000u;
+    return (uintptr_t)((intptr_t)pc + ((intptr_t)imm26 << 2));
+}
+
+static bool ld_ft_decode_icon_ctrl_off(const uint32_t *code, size_t n, uintptr_t get_fn,
+                                       size_t *out_off)
+{
+    for (size_t i = 0; i < n; i++) {
+        uintptr_t pc = (uintptr_t)(code + i);
+        if (ld_ft_decode_bl(pc, code[i]) != get_fn) continue;
+        size_t lim = (i + 7 < n) ? i + 7 : n;
+        for (size_t j = i + 1; j < lim; j++) {
+            uint32_t w = code[j];
+            if ((w & 0xffe00c1fu) == 0xb8000000u) {
+                uint32_t rn = (w >> 5) & 31u;
+                size_t imm9 = (size_t)((w >> 12) & 0x1ffu);
+                if (rn != 29u && imm9 >= 0x0fu && imm9 < 0x180u) {
+                    *out_off = imm9;
+                    return true;
+                }
+            }
+            if ((w & 0xffc0001fu) == 0xb9000000u) {
+                uint32_t rn = (w >> 5) & 31u;
+                size_t off = (size_t)((w >> 10) & 0xfffu) * 4u;
+                if (rn != 29u && off >= 0x0fu && off < 0x180u) {
+                    *out_off = off;
+                    return true;
+                }
+            }
+            if (j + 1 < lim && (w & 0xffe00000u) == 0xd2800000u) {
+                uint32_t rt = w & 31u;
+                uint32_t w2 = code[j + 1];
+                if ((w2 & 0xffe0cc1fu) == 0xb8204800u) {
+                    uint32_t rm = (w2 >> 16) & 31u;
+                    uint32_t rn = (w2 >> 5) & 31u;
+                    size_t off = (size_t)((w >> 5) & 0xffffu);
+                    if (rm == rt && rn != 29u && off >= 0x0fu && off < 0x400u) {
+                        *out_off = off;
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static bool ld_ft_decode_arg_desc_pp_off(const uint32_t *code, size_t n, uintptr_t set_fn,
+                                         size_t *out_off)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (ld_ft_decode_bl((uintptr_t)(code + i), code[i]) != set_fn) continue;
+        size_t lo = (i >= 6) ? i - 6 : 0;
+        for (size_t j = i; j-- > lo;) {
+            uint32_t w = code[j];
+            if ((w & 0xffc003ffu) == 0xf9400364u) {
+                *out_off = (size_t)((w >> 10) & 0xfffu) * 8u;
+                return true;
+            }
+            if (j > lo && (code[j - 1] & 0xffc003e0u) == 0x91400360u
+                    && (w & 0xffc0001fu) == 0xf9400004u) {
+                uint32_t rd = code[j - 1] & 31u;
+                uint32_t rn = (w >> 5) & 31u;
+                if (rd == rn) {
+                    size_t hi = (size_t)((code[j - 1] >> 10) & 0xfffu) << 12;
+                    size_t imm = (size_t)((w >> 10) & 0xfffu) * 8u;
+                    *out_off = hi + imm;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static bool ld_ft_decode_set_hide_fields(uintptr_t set_fn, size_t sz,
+                                         size_t *out_rx, size_t *out_op, size_t *out_sentinel)
+{
+    if (!set_fn || sz < 0x80u || !executable_range(set_fn, sz)) return false;
+    const uint32_t *code = (const uint32_t *)set_fn;
+    size_t n = sz / 4u;
+    size_t rx = 0, op = 0, sentinel = 0;
+
+    /* Find RxBool hide-title offset loaded right after a Dart bool tbz check and passed to BL. */
+    for (size_t i = 0; i + 4 < n; i++) {
+        uint32_t w = code[i];
+        if ((w & 0x7e000000u) != 0x36000000u || ((w >> 19) & 0x1fu) != 4u) continue;
+        for (size_t j = i + 1; j < i + 4 && j + 2 < n; j++) {
+            uint32_t l = code[j];
+            size_t cand = 0;
+            if ((l & 0xffe00c00u) == 0xb8400000u) {
+                uint32_t rn = (l >> 5) & 31u;
+                size_t imm9 = (size_t)((l >> 12) & 0x1ffu);
+                if (rn != 29u && imm9 >= 0x20u && imm9 < 0x1ffu) cand = imm9;
+            }
+            if (!cand) continue;
+            for (size_t k = j + 1; k < j + 5 && k < n; k++) {
+                if (ld_ft_decode_bl((uintptr_t)(code + k), code[k])) {
+                    rx = cand;
+                    break;
+                }
+            }
+            if (rx) break;
+        }
+        if (rx) break;
+    }
+
+    /* Find opacity Value field + Dart late sentinel pool offset near cmp wR, w16. */
+    for (size_t i = 0; i + 4 < n; i++) {
+        size_t cand_op = 0;
+        uint32_t reg_v = 32u;
+        size_t cmp_scan_start = i + 1;
+        uint32_t w0 = code[i];
+        if ((w0 & 0xffe00000u) == 0xd2800000u) {
+            uint32_t rt = w0 & 31u;
+            uint32_t w1 = code[i + 1];
+            if ((w1 & 0xffe0cc00u) == 0xb8604800u
+                    && ((w1 >> 16) & 31u) == rt && ((w1 >> 5) & 31u) != 29u) {
+                cand_op = (size_t)((w0 >> 5) & 0xffffu);
+                reg_v = w1 & 31u;
+                cmp_scan_start = i + 2;
+            }
+        } else if ((w0 & 0xffe00c00u) == 0xb8400000u && ((w0 >> 5) & 31u) != 29u) {
+            cand_op = (size_t)((w0 >> 12) & 0x1ffu);
+            reg_v = w0 & 31u;
+        }
+        if (cand_op < 0x20u || cand_op >= 0x400u || reg_v >= 31u) continue;
+        for (size_t k = cmp_scan_start; k + 1 < cmp_scan_start + 4 && k + 1 < n; k++) {
+            uint32_t wl = code[k], wc = code[k + 1];
+            if ((wl & 0xffc003ffu) == 0xf9400370u && wc == (0x6b10001fu | (reg_v << 5))) {
+                op = cand_op;
+                sentinel = (size_t)((wl >> 10) & 0xfffu) * 8u;
+                break;
+            }
+        }
+        if (op) break;
+    }
+
+    if (!rx || !op || !sentinel) return false;
+    *out_rx = rx;
+    *out_op = op;
+    *out_sentinel = sentinel;
+    return true;
+}
+
+static bool ld_ft_decode_model_off(uintptr_t vis_site, size_t *out_model_off)
+{
+    if (!vis_site || !executable_range(vis_site - 0xa0u, 0xa0u)) return false;
+    const uint32_t *code = (const uint32_t *)(vis_site - 0xa0u);
+    size_t n = 0xa0u / 4u;
+    for (size_t i = n; i-- > 1;) {
+        uint32_t w_cmp = code[i];
+        uint32_t w_ldr = code[i - 1];
+        if ((w_ldr & 0xfffffc00u) == 0xf840f000u && (w_cmp & 0xfffffc1fu) == 0xf100081fu
+                && (w_ldr & 31u) == ((w_cmp >> 5) & 31u)) {
+            uint32_t base_reg = (w_ldr >> 5) & 31u;
+            size_t lo = (i >= 9) ? i - 9 : 0;
+            for (size_t j = i - 1; j-- > lo;) {
+                uint32_t wm = code[j];
+                if ((wm & 0xffe00c00u) == 0xb8400000u && (wm & 31u) == base_reg
+                        && ((wm >> 5) & 31u) != 29u) {
+                    size_t off = (size_t)((wm >> 12) & 0x1ffu);
+                    if (off >= 0x10u && off < 0x1ffu) {
+                        *out_model_off = off;
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static void ld_folder_toggle_open_title(struct ld_dart_context *c, bool hide)
+{
+    if (!__atomic_load_n(&g_show_big_folder_title, __ATOMIC_ACQUIRE)) return;
+    if (!g_fn_set_is_hide_title || !g_cling_icon_ctrl_off || !g_icon_model_off
+            || !g_icon_hide_rx_off || !g_icon_opacity_off || !g_set_hide_arg_pp_off) return;
+    uintptr_t cling = (uintptr_t)c->x[1];
+    uintptr_t null_obj = (uintptr_t)c->x[22];
+    uintptr_t sentinel = 0;
+    if (g_sentinel_pp_off) {
+        ld_read_heap((uintptr_t)c->x[27] + g_sentinel_pp_off, &sentinel, sizeof sentinel);
+    }
+    uintptr_t icon_ctrl = ld_heap_pointer(c, cling, g_cling_icon_ctrl_off);
+    if (!icon_ctrl || icon_ctrl == null_obj || (sentinel && icon_ctrl == sentinel)) return;
+    uintptr_t model = ld_heap_pointer(c, icon_ctrl, g_icon_model_off);
+    if (!model || model == null_obj || (sentinel && model == sentinel)) return;
+    if (ld_heap_i64(model, 0x47) != -100) return;
+    int64_t sx = ld_heap_i64(model, 0x1f);
+    int64_t sy = ld_heap_i64(model, 0x27);
+    if (sx < 1 || sx > 10 || sy < 1 || sy > 10 || (sx == 1 && sy == 1)) return;
+
+    uintptr_t rx_hide = ld_heap_pointer(c, icon_ctrl, g_icon_hide_rx_off);
+    uintptr_t op_val = ld_heap_pointer(c, icon_ctrl, g_icon_opacity_off);
+    if (!rx_hide || rx_hide == null_obj || (sentinel && rx_hide == sentinel)) return;
+    if (!op_val || op_val == null_obj || (sentinel && op_val == sentinel)) return;
+
+    uintptr_t arg_desc = 0;
+    if (!ld_read_heap((uintptr_t)c->x[27] + g_set_hide_arg_pp_off, &arg_desc, sizeof arg_desc)
+            || !arg_desc || arg_desc == null_obj || (sentinel && arg_desc == sentinel)) return;
+
+    uint64_t args[8] = {
+        null_obj,
+        icon_ctrl,
+        null_obj + (hide ? 0x20u : 0x30u),
+        0,
+        arg_desc,
+        0, 0, 0,
+    };
+    (void)ld_dart_call_raw(c, (void *)g_fn_set_is_hide_title, args, 0);
+}
+
+__attribute__((used)) static void ld_observe_folder_open_title(struct ld_dart_context *c)
+{
+    ld_folder_toggle_open_title(c, true);
+}
+
+__attribute__((used)) static void ld_observe_folder_start_anim_title(struct ld_dart_context *c)
+{
+    /* startAnim(this, isOpen): x2 is Dart false (null + 0x30) when close anim starts. */
+    if ((uintptr_t)c->x[2] == (uintptr_t)c->x[22] + 0x30u) {
+        ld_folder_toggle_open_title(c, false);
+    }
+}
+
+LD_DART_OBSERVER(repl_folder_open_title, ld_observe_folder_open_title, g_orig_folder_open_title)
+LD_DART_OBSERVER(repl_folder_start_anim_title, ld_observe_folder_start_anim_title,
+                 g_orig_folder_start_anim_title)
 
 __attribute__((used)) static void ld_observe_folder_title_visibility(struct ld_dart_context *c)
 {
@@ -142,6 +386,10 @@ static void ld_folder_size_install(const struct native_api *api, const ld_lib_in
 
     if (!conf->big_folder_align_icon || !conf->folder_size_targets_present
             || g_orig_aligned_width) {
+        if (g_orig_folder_title_visibility) {
+            __atomic_store_n(&g_show_big_folder_title, conf->big_folder_title_enabled,
+                             __ATOMIC_RELEASE);
+        }
         static int logged_skip;
         if (!g_orig_aligned_width && !logged_skip) {
             logged_skip = 1;
@@ -200,6 +448,46 @@ static void ld_folder_size_install(const struct native_api *api, const ld_lib_in
             if (vis_site && ld_install_alignment_site(api, vis_site, visibility_words,
                     repl_folder_title_visibility, &g_orig_folder_title_visibility)) {
                 ld_blog("big folder title visibility installed: show=%d", conf->big_folder_title_enabled);
+                if (conf->folder_title_anim_present && !g_orig_folder_open_title) {
+                    uintptr_t fns[5] = {0};
+                    int ok = 1;
+                    for (size_t i = 0; i < 5; i++) {
+                        if (conf->folder_title_anim_size[i] < 0x20u
+                                || !ld_vaddr_to_runtime(lib, conf->folder_title_anim_vaddr[i], &fns[i])
+                                || !executable_range(fns[i], conf->folder_title_anim_size[i])) {
+                            ok = 0;
+                            break;
+                        }
+                    }
+                    if (ok && ld_ft_decode_icon_ctrl_off((const uint32_t *)fns[2],
+                                conf->folder_title_anim_size[2] / 4u, fns[4], &g_cling_icon_ctrl_off)
+                            && ld_ft_decode_arg_desc_pp_off((const uint32_t *)fns[2],
+                                conf->folder_title_anim_size[2] / 4u, fns[3], &g_set_hide_arg_pp_off)
+                            && ld_ft_decode_set_hide_fields(fns[3], conf->folder_title_anim_size[3],
+                                &g_icon_hide_rx_off, &g_icon_opacity_off, &g_sentinel_pp_off)
+                            && ld_ft_decode_model_off(vis_site, &g_icon_model_off)
+                            && ld_hook_site_safe(fns[0], "folder open title")
+                            && ld_hook_site_safe(fns[1], "folder close title")) {
+                        g_fn_set_is_hide_title = fns[3];
+                        if (api->hook((void *)fns[0], repl_folder_open_title, &g_orig_folder_open_title) == 0
+                                && ld_pin_code_pages_soft(fns[0], 16)
+                                && api->hook((void *)fns[1], repl_folder_start_anim_title,
+                                             &g_orig_folder_start_anim_title) == 0
+                                && ld_pin_code_pages_soft(fns[1], 16)) {
+                            ld_blog("big folder title open/close sync installed: cling_off=%#zx "
+                                    "model=%#zx rx=%#zx op=%#zx arg_pp=%#zx sent_pp=%#zx",
+                                    g_cling_icon_ctrl_off, g_icon_model_off, g_icon_hide_rx_off,
+                                    g_icon_opacity_off, g_set_hide_arg_pp_off, g_sentinel_pp_off);
+                        } else {
+                            ld_blog("big folder title open/close hook failed");
+                        }
+                    } else {
+                        ld_blog("big folder title open/close decode miss ok=%d cling=%#zx arg=%#zx "
+                                "rx=%#zx op=%#zx model=%#zx",
+                                ok, g_cling_icon_ctrl_off, g_set_hide_arg_pp_off,
+                                g_icon_hide_rx_off, g_icon_opacity_off, g_icon_model_off);
+                    }
+                }
             }
         }
     }
@@ -270,9 +558,21 @@ LD_DART_ROUTED_OBSERVER(repl_folder_preview_inset, ld_observe_folder_preview_ins
 
 static void ld_install_folder_preview_inset(const struct native_api *api, const ld_lib_info *lib)
 {
-    if (g_orig_preview_inset) return;
+    static int attempted;
+    if (g_orig_preview_inset || attempted) return;
+    attempted = 1;
     const uint32_t render_words[] = {0xfc1783a2, 0xfc407280, 0xfc1803a0, 0xfc40f281};
-    uintptr_t site = ld_find_aot_pattern(lib, 0x14868e8, render_words, 4);
+    uintptr_t site = 0;
+    if (g_home_options.folder_pad_targets_present && g_home_options.folder_pad_vaddr[8]) {
+        uintptr_t fn = 0;
+        size_t sz = g_home_options.folder_pad_size[8];
+        if (sz >= 16u && ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.folder_pad_vaddr[8], &fn)) {
+            site = ld_find_words_in_range(fn, sz, render_words, 4);
+        }
+    }
+    if (!site && !g_aot_strict_no_short_fallback) {
+        site = ld_find_aot_pattern(lib, 0x14868e8, render_words, 4);
+    }
     if (!site) return;
     g_preview_inset_resume = site + 16;
     if (ld_install_alignment_site(api, site, render_words,

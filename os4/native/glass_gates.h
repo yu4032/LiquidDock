@@ -1,6 +1,7 @@
 #ifndef LD_OS4_GLASS_GATES_H
 #define LD_OS4_GLASS_GATES_H
 #include <stdint.h>
+#include "dart_heap.h"
 
 /* These functions return Dart canonical bool objects, not C booleans:
  * x22+0x20 is true, x22+0x30 false. The extended wrappers call their vendor
@@ -480,7 +481,7 @@ __attribute__((used)) static void ld_observe_pad_widget_container(struct ld_dart
         uintptr_t ctrl = ld_heap_pointer(c, container, 0xf);
         item = ctrl ? ld_heap_pointer(c, ctrl, 0xb) : 0;
     }
-    if (!item) return;
+    if (!item || ld_dart_is_ro_addr(item)) return;
     uint32_t dart_true = (uint32_t)(c->x[22] + 0x20);
     memcpy((void *)(item + 0xfb), &dart_true, 4);
     memcpy((void *)(item + 0x10f), &dart_true, 4);

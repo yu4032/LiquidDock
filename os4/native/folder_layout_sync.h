@@ -479,6 +479,7 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
     }
 
     for (unsigned i = 0; i < len; i++) {
+        if (ld_dart_is_ro_addr(items[i])) continue;
         double nx = adj[i].x + ph;
         double ny = adj[i].y + pv;
         memcpy((void *)(items[i] + 7u), &adj[i].width, sizeof adj[i].width);

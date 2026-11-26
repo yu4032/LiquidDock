@@ -104,7 +104,7 @@ internal val overviewEntries = listOf(
 
 internal val layoutEntries = listOf(
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、大文件夹、小组件缩放与横竖屏间距"),
-    HubEntry(Page.IconSize, R.string.page_icon_size, "独立调节普通与工作台工作区、Dock 及大文件夹图标大小"),
+    HubEntry(Page.IconSize, R.string.page_icon_size, "统一调节工作区与所有应用页，独立调节普通/工作台 Dock 及大文件夹图标大小"),
     HubEntry(Page.Dock, R.string.page_dock, "Dock 几何尺寸、位置、圆角与分隔线"),
     HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock、所有应用布局与多分屏"),
 )

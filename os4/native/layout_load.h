@@ -149,6 +149,7 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
         goto done;
     }
     for(size_t i=0;i<count;i++) {
+        if (ld_dart_is_ro_addr(objects[i])) continue;
         /* ItemInfo DTO fields are compressed nullable ints, unlike the unboxed
          * ItemInfoModel. Small coordinates are immediate Smis, never pointers. */
         int32_t x=target[i].x*2,y=target[i].y*2;

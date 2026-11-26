@@ -73,10 +73,14 @@ static void ld_layout_write_items(const uintptr_t *cells, const uintptr_t *model
 {
     for (size_t i = 0; i < n; i++) {
         int64_t x = items[i].x, y = items[i].y;
-        memcpy((void *)(cells[i] + 0xb), &x, 8);
-        memcpy((void *)(cells[i] + 0x13), &y, 8);
-        memcpy((void *)(models[i] + 0x37), &x, 8);
-        memcpy((void *)(models[i] + 0x3f), &y, 8);
+        if (!ld_dart_is_ro_addr(cells[i])) {
+            memcpy((void *)(cells[i] + 0xb), &x, 8);
+            memcpy((void *)(cells[i] + 0x13), &y, 8);
+        }
+        if (!ld_dart_is_ro_addr(models[i])) {
+            memcpy((void *)(models[i] + 0x37), &x, 8);
+            memcpy((void *)(models[i] + 0x3f), &y, 8);
+        }
     }
 }
 
@@ -144,7 +148,9 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
             : (square ? (g_grid_cols<LD_LAYOUT_MAX_DIM ? g_grid_cols+1 : g_grid_cols-1)
                       : ld_heap_i64(c->x[2],0x23));
         int64_t oldrows=stale_old ? prev_rows : (square?g_grid_rows:ld_heap_i64(c->x[2],0x1b));
-        memcpy((void *)(receiver+7),&oldcols,8); memcpy((void *)(receiver+15),&oldrows,8);
+        if (!ld_dart_is_ro_addr(receiver)) {
+            memcpy((void *)(receiver+7),&oldcols,8); memcpy((void *)(receiver+15),&oldrows,8);
+        }
         if(initial) __atomic_store_n(&g_initial_restore, 2, __ATOMIC_RELEASE);
         ld_blog("vendor layout transaction requested direction=%d initial=%d stale_old=%d",direction,initial,stale_old);
     }
@@ -288,8 +294,12 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     if(!saved) goto done;
     for(size_t i=0;i<count;i++) {
         int64_t x=target[i].x,y=target[i].y;
-        memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
-        memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
+        if (!ld_dart_is_ro_addr(cells[i])) {
+            memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
+        }
+        if (!ld_dart_is_ro_addr(models[i])) {
+            memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
+        }
     }
     g_restore_ready=1;
     if(initial) {

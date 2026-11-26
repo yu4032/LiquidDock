@@ -94,4 +94,55 @@ __attribute__((naked, used)) static void name(void) { \
         "ldr x16, [x16, :lo12:" #original "]\n" \
         "br x16\n"); \
 }
+
+/* Call a Dart AOT function from inside an observer/interceptor callback.
+ * x0=ctx, x1=fn, x2=args[8], x3=push_smi_on_dart_stack (0 or Smi value).
+ * Sets Dart SP (x15) below current C sp so nested Dart frames never collide
+ * with temporary C stack, and preserves AAPCS callee-saved d8..d15.
+ */
+__attribute__((naked, noinline)) static uint64_t ld_dart_call_raw(
+    const struct ld_dart_context *c, void *fn, const uint64_t args[8], uint64_t dart_stack_arg)
+{
+    __asm__ volatile(
+        "stp x29, x30, [sp, #-160]!\n"
+        "mov x29, sp\n"
+        "stp x19, x20, [sp, #16]\n"
+        "stp x21, x22, [sp, #32]\n"
+        "stp x23, x24, [sp, #48]\n"
+        "stp x25, x26, [sp, #64]\n"
+        "stp x27, x28, [sp, #80]\n"
+        "stp d8,  d9,  [sp, #96]\n"
+        "stp d10, d11, [sp, #112]\n"
+        "stp d12, d13, [sp, #128]\n"
+        "stp d14, d15, [sp, #144]\n"
+        "mov x9, x1\n"
+        "mov x10, x2\n"
+        "mov x11, x3\n"
+        "sub x15, sp, #64\n"
+        "ldr x21, [x0, #168]\n"
+        "ldr x22, [x0, #176]\n"
+        "ldr x26, [x0, #208]\n"
+        "ldr x27, [x0, #216]\n"
+        "ldr x28, [x0, #224]\n"
+        "cbz x11, 1f\n"
+        "str x11, [x15, #-8]!\n"
+        "1:\n"
+        "ldp x0, x1, [x10, #0]\n"
+        "ldp x2, x3, [x10, #16]\n"
+        "ldp x4, x5, [x10, #32]\n"
+        "ldp x6, x7, [x10, #48]\n"
+        "blr x9\n"
+        "ldp d14, d15, [sp, #144]\n"
+        "ldp d12, d13, [sp, #128]\n"
+        "ldp d10, d11, [sp, #112]\n"
+        "ldp d8,  d9,  [sp, #96]\n"
+        "ldp x19, x20, [sp, #16]\n"
+        "ldp x21, x22, [sp, #32]\n"
+        "ldp x23, x24, [sp, #48]\n"
+        "ldp x25, x26, [sp, #64]\n"
+        "ldp x27, x28, [sp, #80]\n"
+        "ldp x29, x30, [sp], #160\n"
+        "ret\n"
+    );
+}
 #endif

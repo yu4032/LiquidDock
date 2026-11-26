@@ -252,8 +252,27 @@ static inline double ld_ws_device_width(void)
 
 static inline int ld_ws_is_const_ro(uintptr_t addr)
 {
-    Dl_info di;
-    return dladdr((const void *)addr, &di) != 0;
+    return ld_dart_is_ro_addr(addr);
+}
+
+static inline uint32_t ld_ws_dart_cid(uintptr_t obj)
+{
+    uint64_t hdr = 0;
+    if (obj < 4096u || !ld_read_heap(obj - 1u, &hdr, sizeof hdr)) return UINT32_MAX;
+    return (uint32_t)((hdr >> 12) & 0xfffffu);
+}
+
+static inline int ld_ws_is_non_double_singleton(const struct ld_ws_ctx *c, uintptr_t obj)
+{
+    if (!c || obj < 4096u) return 1;
+    uintptr_t null_obj = (uintptr_t)c->x[22];
+    if (!null_obj) return 1;
+    if ((obj & ~UINT64_C(0x7ffff)) == (null_obj & ~UINT64_C(0x7ffff))) return 1;
+    uint32_t cid = ld_ws_dart_cid(obj);
+    uint32_t null_cid = ld_ws_dart_cid(null_obj);
+    uint32_t bool_cid = ld_ws_dart_cid(null_obj + 0x20u);
+    if (cid == UINT32_MAX || cid == null_cid || cid == bool_cid) return 1;
+    return 0;
 }
 
 static inline void ld_ws_apply_dock_height(uintptr_t size)
@@ -808,14 +827,16 @@ __attribute__((used)) static void ld_ws_post_allapps_ind(struct ld_ws_ctx *c)
     uintptr_t bot_box = ld_heap_pointer(&dc, pos, 0x1b);
     uintptr_t top_box = ld_heap_pointer(&dc, pos, 0x13);
     double val = 0.0;
-    if (bot_box && !ld_ws_is_const_ro(bot_box) && ld_read_heap(bot_box + 7, &val, 8) && isfinite(val)) {
+    if (bot_box && !ld_ws_is_const_ro(bot_box) && !ld_ws_is_non_double_singleton(c, bot_box) &&
+        ld_read_heap(bot_box + 7, &val, 8) && isfinite(val)) {
         double next = val - ind_y;
         static unsigned logs;
         if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 3) {
             ld_blog("ws_allapps_ind: dir=%d bot=%.1f->%.1f ind_y=%.1f", dir, val, next, ind_y);
         }
         memcpy((void *)(bot_box + 7), &next, 8);
-    } else if (top_box && !ld_ws_is_const_ro(top_box) && ld_read_heap(top_box + 7, &val, 8) && isfinite(val)) {
+    } else if (top_box && !ld_ws_is_const_ro(top_box) && !ld_ws_is_non_double_singleton(c, top_box) &&
+               ld_read_heap(top_box + 7, &val, 8) && isfinite(val)) {
         double next = val + ind_y;
         static unsigned logs;
         if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 3) {

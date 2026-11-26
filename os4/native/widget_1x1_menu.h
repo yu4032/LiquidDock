@@ -204,56 +204,7 @@ __attribute__((naked, used)) static void name(void) { \
     ); \
 }
 
-/* Call a Dart AOT function from inside an interceptor callback.
- * x0=ctx, x1=fn, x2=args[8], x3=push_smi_on_dart_stack (0 or Smi value for allocateTwoByteString).
- * Sets Dart SP (x15) below current C sp so nested Dart frames never collide with
- * LD_DART_INTERCEPTOR's temporary C stack, and preserves AAPCS callee-saved d8..d15.
- */
-__attribute__((naked, noinline)) static uint64_t ld_dart_call_raw(
-    const struct ld_dart_context *c, void *fn, const uint64_t args[8], uint64_t dart_stack_arg)
-{
-    __asm__ volatile(
-        "stp x29, x30, [sp, #-160]!\n"
-        "mov x29, sp\n"
-        "stp x19, x20, [sp, #16]\n"
-        "stp x21, x22, [sp, #32]\n"
-        "stp x23, x24, [sp, #48]\n"
-        "stp x25, x26, [sp, #64]\n"
-        "stp x27, x28, [sp, #80]\n"
-        "stp d8,  d9,  [sp, #96]\n"
-        "stp d10, d11, [sp, #112]\n"
-        "stp d12, d13, [sp, #128]\n"
-        "stp d14, d15, [sp, #144]\n"
-        "mov x9, x1\n"       /* fn */
-        "mov x10, x2\n"      /* args */
-        "mov x11, x3\n"      /* optional dart stack arg */
-        "sub x15, sp, #64\n" /* fresh Dart SP below C frame */
-        "ldr x21, [x0, #168]\n" /* c->x[21] */
-        "ldr x22, [x0, #176]\n" /* c->x[22] */
-        "ldr x26, [x0, #208]\n" /* c->x[26] */
-        "ldr x27, [x0, #216]\n" /* c->x[27] */
-        "ldr x28, [x0, #224]\n" /* c->x[28] */
-        "cbz x11, 1f\n"
-        "str x11, [x15, #-8]!\n"
-        "1:\n"
-        "ldp x0, x1, [x10, #0]\n"
-        "ldp x2, x3, [x10, #16]\n"
-        "ldp x4, x5, [x10, #32]\n"
-        "ldp x6, x7, [x10, #48]\n"
-        "blr x9\n"
-        "ldp d14, d15, [sp, #144]\n"
-        "ldp d12, d13, [sp, #128]\n"
-        "ldp d10, d11, [sp, #112]\n"
-        "ldp d8,  d9,  [sp, #96]\n"
-        "ldp x19, x20, [sp, #16]\n"
-        "ldp x21, x22, [sp, #32]\n"
-        "ldp x23, x24, [sp, #48]\n"
-        "ldp x25, x26, [sp, #64]\n"
-        "ldp x27, x28, [sp, #80]\n"
-        "ldp x29, x30, [sp], #160\n"
-        "ret\n"
-    );
-}
+/* Uses shared ld_dart_call_raw from dart_observer.h. */
 
 static inline uint32_t ld_dart_cid(uintptr_t obj)
 {
@@ -490,7 +441,7 @@ __attribute__((used)) static int ld_w1x1_on_menu_item_build(struct ld_dart_conte
         is_1x1 = g_w1x1_last_is_1x1;
     }
     uintptr_t s = ld_w1x1_make_dart_string(c, is_1x1);
-    if (s && (s & 1)) {
+    if (s && (s & 1) && !ld_dart_is_ro_addr(widget)) {
         uint32_t s_comp = (uint32_t)(s & 0xFFFFFFFFu);
         memcpy((void *)(widget + 0xf), &s_comp, sizeof s_comp);
     }
@@ -680,7 +631,7 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
         (void)ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_COMMIT_WIDGET_RESIZE], a_commit, 0);
 
         g_w1x1_pending.active = 0;
-    } else {
+    } else if (!ld_dart_is_ro_addr(widget)) {
         memcpy((void *)(widget + 0x37), &target_x, sizeof target_x);
         memcpy((void *)(widget + 0x3f), &target_y, sizeof target_y);
         memcpy((void *)(widget + 0x1f), &target_sx, sizeof target_sx);
@@ -754,19 +705,23 @@ __attribute__((used)) static int ld_w1x1_on_resize_needed(struct ld_dart_context
     int64_t sy = g_w1x1_pending.span_y;
     g_w1x1_pending.active = 0;
 
-    memcpy((void *)(widget + 0x37), &cx, sizeof cx);
-    memcpy((void *)(widget + 0x3f), &cy, sizeof cy);
-    memcpy((void *)(widget + 0x1f), &sx, sizeof sx);
-    memcpy((void *)(widget + 0x27), &sy, sizeof sy);
+    if (!ld_dart_is_ro_addr(widget)) {
+        memcpy((void *)(widget + 0x37), &cx, sizeof cx);
+        memcpy((void *)(widget + 0x3f), &cy, sizeof cy);
+        memcpy((void *)(widget + 0x1f), &sx, sizeof sx);
+        memcpy((void *)(widget + 0x27), &sy, sizeof sy);
+    }
 
     uint32_t smi_cx = (uint32_t)(cx << 1);
     uint32_t smi_cy = (uint32_t)(cy << 1);
     uint32_t smi_sx = (uint32_t)(sx << 1);
     uint32_t smi_sy = (uint32_t)(sy << 1);
-    memcpy((void *)(ctrl + 0x97), &smi_cx, sizeof smi_cx);
-    memcpy((void *)(ctrl + 0x9b), &smi_cy, sizeof smi_cy);
-    memcpy((void *)(ctrl + 0x9f), &smi_sx, sizeof smi_sx);
-    memcpy((void *)(ctrl + 0xa3), &smi_sy, sizeof smi_sy);
+    if (!ld_dart_is_ro_addr(ctrl)) {
+        memcpy((void *)(ctrl + 0x97), &smi_cx, sizeof smi_cx);
+        memcpy((void *)(ctrl + 0x9b), &smi_cy, sizeof smi_cy);
+        memcpy((void *)(ctrl + 0x9f), &smi_sx, sizeof smi_sx);
+        memcpy((void *)(ctrl + 0xa3), &smi_sy, sizeof smi_sy);
+    }
 
     c->x[0] = c->x[22];
     return 1;

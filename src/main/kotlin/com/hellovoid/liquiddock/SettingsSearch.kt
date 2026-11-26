@@ -147,7 +147,6 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             toggle(ConfigSchema.Grid.ICON_SIZE_ENABLED, "自定义图标大小"),
             number(launcher450IconSizeSpec),
             number(dockIconSizeSpec),
-            number(wsIconSizeSpec),
             number(wsDockIconSizeSpec),
         ) + folderIconSizeSpecs.map(::number)
         Page.GridBasics -> listOf(
@@ -260,10 +259,9 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
             ConfigSchema.Grid.ICON_SIZE_ENABLED.name() -> 2
             launcher450IconSizeSpec.key -> 4
             dockIconSizeSpec.key -> 5
-            wsIconSizeSpec.key -> 7
-            wsDockIconSizeSpec.key -> 8
+            wsDockIconSizeSpec.key -> 6
             else -> folderIconSizeSpecs.indexOfFirst { it.key == key }
-                .takeIf { it >= 0 }?.plus(10)
+                .takeIf { it >= 0 }?.plus(8)
                 ?: -1
         }
         Page.GridBasics -> when (key) {

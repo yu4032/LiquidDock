@@ -100,6 +100,13 @@ internal object Os4GlassSymbols {
         "GridController.getMiuiWidgetSizeSpec",
         "FolderIconWidget._buildTitle",
     )
+    private val folderTitleAnimSymbolNames = listOf(
+        "FolderClingGetxController.open",
+        "FolderClingGetxController.startAnim",
+        "FolderClingGetxController.bindFolderInfo",
+        "FolderIconGetxController.setIsHideTitle",
+        "FolderIconGetxController.get",
+    )
     private val glassScopeSymbolSpecs = listOf(
         "_RecentsGlassWidgetState.build" to 16L,
         "_FolderGlassLightWidgetState.build" to 16L,
@@ -199,6 +206,7 @@ internal object Os4GlassSymbols {
         val folderBlurTarget: String = "",
         val shortcutBlurTargets: String = "",
         val wsAllAppsBlurTarget: String = "",
+        val folderTitleAnimTargets: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -254,6 +262,7 @@ internal object Os4GlassSymbols {
         val folderTarget = fromMiniElfSingle(mini, FOLDER_CORNER_DRAG_TARGET)
         val folderPadTargets = fromMiniElfPadBypass(mini)
         val folderSizeTargets = fromMiniElfSymbolList(mini, folderSizeSymbolNames)
+        val folderTitleAnimTargets = fromMiniElfSymbolList(mini, folderTitleAnimSymbolNames)
         val widgetResizeTargets = fromMiniElfSymbolList(mini, widgetResizeSymbolNames)
         val folderGridTargets = fromMiniElfSymbolList(mini, folderGridSymbolNames)
         val getStreamAddTarget = fromMiniElfSingle(mini, GETSTREAM_ADD_TARGET)
@@ -343,10 +352,7 @@ internal object Os4GlassSymbols {
                 "FolderAnimController._refreshCachedGridParams" to 512L,
             ),
         )
-        val dockIconSizeTarget = fromMiniElfSymbolSpecs(
-            mini,
-            listOf("HotSeatsConstants2.mHotSeatsScale" to 32L),
-        )
+        val dockIconSizeTarget = fromMiniElfDockIconTargets(mini)
         val folderPreviewDimTargets = fromMiniElfSymbolSpecs(
             mini,
             listOf(
@@ -416,6 +422,7 @@ internal object Os4GlassSymbols {
             folderBlurTarget,
             shortcutBlurTargets,
             wsAllAppsBlurTarget,
+            folderTitleAnimTargets,
         )
     }
 
@@ -448,6 +455,56 @@ internal object Os4GlassSymbols {
             "0x" + pair.first.toString(16) + ":" + scanSize
         }
         return entries.joinToString(",")
+    }
+
+    private fun findAllSymbols(
+        elf: Elf64,
+        sections: List<Elf64.Section>,
+        requested: String,
+        minSize: Long = 16L,
+        maxSize: Long = 2048L,
+    ): List<Pair<Long, Long>> {
+        val hits = mutableSetOf<Pair<Long, Long>>()
+        for (table in sections) {
+            if (table.type != 2L || table.link !in sections.indices ||
+                table.entrySize != 24L) continue
+            val strings = sections[table.link]
+            if (strings.type != 3L || table.size / 24L > 200_000L) continue
+            for (i in 0 until (table.size / 24L).toInt()) {
+                val pos = table.offset + i * 24L
+                val strOff = elf.u32(pos)
+                val type = elf.u8(pos + 4) and 15
+                val shndx = elf.u16(pos + 6)
+                val vaddr = elf.u64(pos + 8)
+                val size = elf.u64(pos + 16)
+                if (strOff == 0L || (type != 0 && type != 2) ||
+                    shndx == 0 || vaddr < 0x4000L || vaddr % 4L != 0L ||
+                    size !in minSize..maxSize) continue
+                if (elf.equalsString(strings, strOff, requested)) hits.add(vaddr to size)
+            }
+        }
+        return hits.sortedBy { it.first }
+    }
+
+    private fun fromMiniElfDockIconTargets(data: ByteArray): String {
+        val elf = Elf64(data)
+        val sections = elf.sections()
+        val scale = findSingleSymbol(elf, sections, "HotSeatsConstants2.mHotSeatsScale", minSize = 32L)
+            ?: return ""
+        val actW = findSingleSymbol(elf, sections, "HotseatLayerGetxControllerPadNew.getItemActualWidth", minSize = 64L)
+            ?: findSingleSymbol(elf, sections, "HotseatLayerGetxControllerPadNew._getItemActualWidth", minSize = 64L)
+        val actH = findSingleSymbol(elf, sections, "HotseatLayerGetxControllerPadNew.getItemActualHeight", minSize = 64L)
+            ?: findSingleSymbol(elf, sections, "HotseatLayerGetxControllerPadNew._getItemActualHeight", minSize = 64L)
+        val iconWs = findAllSymbols(elf, sections, "ShortCutCommonMixin.launcherIconWidth", minSize = 128L).take(2)
+        val iconHs = findAllSymbols(elf, sections, "ShortCutCommonMixin.launcherIconHeight", minSize = 128L).take(2)
+        val out = buildList {
+            add(scale)
+            if (actW != null) add(actW)
+            if (actH != null) add(actH)
+            addAll(iconWs)
+            addAll(iconHs)
+        }
+        return out.joinToString(",") { "0x" + it.first.toString(16) + ":" + it.second }
     }
 
     private fun findSingleSymbol(

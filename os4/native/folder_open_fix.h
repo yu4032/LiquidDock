@@ -396,21 +396,47 @@ static bool ld_fof_decode_all(const struct ld_fof_sym syms[6], struct ld_fof_sta
         size_t n = syms[2].sz / 4u;
         bool got_dev = false, got_hpad = false;
         for (size_t i = 0; i + 4 < n; i++) {
-            uintptr_t sw_fn = 0;
-            if (!ld_fof_decode_bl(syms[2].rt + i * 4u, c[i], &sw_fn) || !executable_range(sw_fn, 0x30u))
-                continue;
-            const uint32_t *sw = (const uint32_t *)sw_fn;
             int32_t obj_off = -1, sw_off = -1;
-            if (ld_fof_decode_ldur_w(sw[0], 0, 1, &obj_off) && obj_off > 0 &&
-                sw[1] == 0x8b1c8000u &&
-                ld_fof_decode_ldur_d(sw[5], 0, 0, &sw_off) && sw_off > 0) {
+            uintptr_t sw_fn = 0;
+            if (ld_fof_decode_bl(syms[2].rt + i * 4u, c[i], &sw_fn) && executable_range(sw_fn, 0x30u)) {
+                /* Out-of-line helper form (e.g. 8.01.02.8604) */
+                const uint32_t *sw = (const uint32_t *)sw_fn;
+                if (!(ld_fof_decode_ldur_w(sw[0], 0, 1, &obj_off) && obj_off > 0 &&
+                      sw[1] == 0x8b1c8000u &&
+                      ld_fof_decode_ldur_d(sw[5], 0, 0, &sw_off) && sw_off > 0)) {
+                    obj_off = -1;
+                    sw_off = -1;
+                }
+            } else if ((c[i] & 0xffe00c1fu) == 0xfc400000u) {
+                /* Inlined form (e.g. 8.01.03.308):
+                 *   ldur wR, [x0, #obj_off]
+                 *   add  xR, xR, x28, lsl #32
+                 *   ...
+                 *   ldur d0, [xR, #sw_off]   <-- c[i]
+                 */
+                uint32_t rn = (c[i] >> 5) & 0x1fu;
+                int32_t imm_d = ld_fof_sign_ext9(c[i]);
+                if (rn != 0 && rn != 29 && imm_d > 0) {
+                    for (size_t k = i; k > 0 && i - k <= 8u; k--) {
+                        int32_t imm_w = 0;
+                        uint32_t expected_add = 0x8b1c8000u | (rn << 5) | rn;
+                        if (ld_fof_decode_ldur_w(c[k - 1], rn, 0, &imm_w) && imm_w > 0 &&
+                            c[k] == expected_add) {
+                            obj_off = imm_w;
+                            sw_off = imm_d;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (obj_off > 0 && sw_off > 0) {
                 int32_t st_d0 = 0;
                 uint32_t hpad_off = 0;
                 if (ld_fof_decode_stur_d(c[i + 1], 0, 29, &st_d0) &&
                     ld_fof_is_ldr_x0_x26_78(c[i + 2]) &&
                     ld_fof_decode_ldr_x0_x0_uimm(c[i + 3], &hpad_off) && hpad_off != 0) {
                     uint32_t dev_off = 0;
-                    for (size_t b = i; b > 0 && i - b < 28u; b--) {
+                    for (size_t b = i; b > 0 && i - b < 32u; b--) {
                         uint32_t goff = 0;
                         if (ld_fof_is_ldr_x0_x26_78(c[b - 1]) &&
                             ld_fof_decode_ldr_x0_x0_uimm(c[b], &goff) && goff != 0 &&

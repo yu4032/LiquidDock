@@ -144,9 +144,9 @@ internal fun optionSummary(key: String): String = when (key) {
 
 internal val launcher450IconSizeSpec = IntSpec(
     ConfigSchema.Grid.ICON_SIZE_PERCENT,
-    "普通模式 · 工作区图标大小",
+    "工作区图标大小",
     "%",
-    summary = "独立调整普通模式桌面工作区与小文件夹图标大小；100% 为系统默认；重启桌面生效",
+    summary = "统一调整普通模式、工作台工作区、所有应用页与小文件夹的图标大小；100% 为系统默认；重启桌面生效",
 )
 
 internal val dockIconSizeSpec = IntSpec(
@@ -156,18 +156,11 @@ internal val dockIconSizeSpec = IntSpec(
     summary = "独立调整普通模式 Dock 栏图标大小（不受工作区缩放影响）；100% 为系统默认；重启桌面生效",
 )
 
-internal val wsIconSizeSpec = IntSpec(
-    ConfigSchema.Grid.WS_ICON_SIZE_PERCENT,
-    "工作台 · 工作区图标大小",
-    "%",
-    summary = "独立调整工作台模式工作区图标大小；100% 为系统默认；重启桌面生效",
-)
-
 internal val wsDockIconSizeSpec = IntSpec(
     ConfigSchema.Grid.WS_DOCK_ICON_SIZE_PERCENT,
     "工作台 · Dock 图标大小",
     "%",
-    summary = "独立调整工作台模式 Dock 栏图标大小（不受工作台工作区缩放影响）；100% 为系统默认；重启桌面生效",
+    summary = "独立调整工作台模式 Dock 栏图标大小（不受工作区缩放影响）；100% 为系统默认；重启桌面生效",
 )
 
 internal val folderIconSizeSpecs = listOf(

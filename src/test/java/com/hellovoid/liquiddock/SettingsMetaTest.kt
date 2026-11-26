@@ -109,7 +109,6 @@ class SettingsMetaTest {
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
             launcher450IconSizeSpec.key,
             dockIconSizeSpec.key,
-            wsIconSizeSpec.key,
             wsDockIconSizeSpec.key,
         ) + folderIconSizeSpecs.map { it.key }
         assertEquals(expectedIcons, iconRows.map { it.key }.toSet())

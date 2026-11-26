@@ -77,9 +77,13 @@ static void ld_apply_home_geometry(struct ld_dart_context *c,uintptr_t grid)
         side,nside,top,ntop,bottom,nbottom);
     if(!isfinite(nside)||!isfinite(ntop)||!isfinite(nbottom)
             || nside<-400||nside>800||ntop<-400||ntop>800||nbottom<-400||nbottom>800) GEOM_BAIL(insane);
-    memcpy((void *)(sub+0x1f),&nside,8);
-    memcpy((void *)(topbox+7),&ntop,8);
-    memcpy((void *)(sub+0x57),&nbottom,8);
+    if (!ld_dart_is_ro_addr(sub)) {
+        memcpy((void *)(sub+0x1f),&nside,8);
+        memcpy((void *)(sub+0x57),&nbottom,8);
+    }
+    if (!ld_dart_is_ro_addr(topbox)) {
+        memcpy((void *)(topbox+7),&ntop,8);
+    }
     __atomic_fetch_add(&g_geom_ok,1u,__ATOMIC_RELAXED);
     if(diag<20u) ld_blog("home geometry applied #%u", __atomic_load_n(&g_geom_ok,__ATOMIC_RELAXED));
     #undef GEOM_BAIL

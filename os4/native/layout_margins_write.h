@@ -109,7 +109,7 @@ __attribute__((used)) static void ld_lmw_post(unsigned char *save, uintptr_t res
     (void)result;
     uintptr_t rules = 0;
     __builtin_memcpy(&rules, save + 8, sizeof rules);
-    if (!rules) return;
+    if (!rules || ld_dart_is_ro_addr(rules)) return;
     unsigned n = __atomic_fetch_add(&g_lmw_calls, 1u, __ATOMIC_RELAXED);
     if (n < 3u) ld_blog("margins-write: post #%u rules=%p", n + 1u, (void *)rules);
     if (g_lmw_have_side) {

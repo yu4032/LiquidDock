@@ -111,7 +111,7 @@ internal fun IconSizePage(
     DenseSettingsList(
         padding,
         stringResource(R.string.page_icon_size),
-        "独立调节普通模式、工作台模式的工作区与 Dock 图标大小，以及各类型大文件夹预览图标大小；重启桌面后生效。",
+        "统一调节工作区与所有应用页图标大小，独立调节普通/工作台 Dock 及各类型大文件夹图标大小；重启桌面后生效。",
         focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.IconSize, it.key) },
         focusSequence = searchFocus?.sequence,
     ) {
@@ -122,13 +122,13 @@ internal fun IconSizePage(
                     prefs,
                     ConfigSchema.Grid.ICON_SIZE_ENABLED,
                     "自定义图标大小",
-                    "开启后按下方分类独立生效；关闭则恢复系统默认尺寸；重启桌面后生效",
+                    "开启后按下方分类生效；关闭则恢复系统默认尺寸；重启桌面后生效",
                     masterEnabled,
                 ) { iconSizeEnabled = it }
             }
         }
-        item(key = "icon-size-normal-heading") { SmallTitle("普通模式") }
-        item(key = "icon-size-normal-workspace") {
+        item(key = "icon-size-workspace-dock-heading") { SmallTitle("工作区与 Dock") }
+        item(key = "icon-size-workspace") {
             SettingsCard {
                 IntSetting(prefs, launcher450IconSizeSpec, masterEnabled && iconSizeEnabled)
             }
@@ -136,12 +136,6 @@ internal fun IconSizePage(
         item(key = "icon-size-normal-dock") {
             SettingsCard {
                 IntSetting(prefs, dockIconSizeSpec, masterEnabled && iconSizeEnabled)
-            }
-        }
-        item(key = "icon-size-ws-heading") { SmallTitle("工作台模式") }
-        item(key = "icon-size-ws-workspace") {
-            SettingsCard {
-                IntSetting(prefs, wsIconSizeSpec, masterEnabled && iconSizeEnabled)
             }
         }
         item(key = "icon-size-ws-dock") {

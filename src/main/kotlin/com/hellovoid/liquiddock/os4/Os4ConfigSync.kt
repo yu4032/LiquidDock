@@ -272,6 +272,9 @@ object Os4ConfigSync {
                     if (resolvedTargets.wsAllAppsBlurTarget.isNotEmpty()) {
                         append("ws_allapps_blur_target=").append(resolvedTargets.wsAllAppsBlurTarget).append('\n')
                     }
+                    if (resolvedTargets.folderTitleAnimTargets.isNotEmpty()) {
+                        append("folder_title_anim_targets=").append(resolvedTargets.folderTitleAnimTargets).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }
