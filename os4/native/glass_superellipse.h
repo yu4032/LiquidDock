@@ -131,24 +131,25 @@ static void ld_gse_cache_store(float w, float h, float rx, float ry,
 
 /* Dock 命中：矩形宽高匹配 1880x3008（全屏玻璃层）或 dock 条阈值
  * （宽 > 600 且高 < 320，与 superellipse.h 的 dock 探测一致）。
- * 同时兼容 rect 的 (l,t,r,b) 与 (x,y,w,h) 两种解释，日志两者都打。 */
+ * rect 在引擎记录中为 (l,t,r,b)；排除桌面小组件/大文件夹各自的对称内边距 SaveLayer
+ * （例如 (33.5, 33.5) 起点的 2x1/3x1 条形大文件夹 183.1x58.1）。 */
 static int ld_gse_rect_is_dock(const float *rect, float *w_out, float *h_out)
 {
     float l = rect[0], t = rect[1], r = rect[2], b = rect[3];
     if (!isfinite(l) || !isfinite(t) || !isfinite(r) || !isfinite(b))
         return 0;
     float w1 = fabsf(r - l), h1 = fabsf(b - t); /* (l,t,r,b) */
-    float w2 = fabsf(r), h2 = fabsf(b);         /* (x,y,w,h) */
     *w_out = w1;
     *h_out = h1;
     int full1 = fabsf(w1 - 1880.0f) < 2.0f && fabsf(h1 - 3008.0f) < 2.0f;
-    int full2 = fabsf(w2 - 1880.0f) < 2.0f && fabsf(h2 - 3008.0f) < 2.0f;
+    if (full1) return 1;
+    /* 桌面单卡（1x1/2x1/1x2/2x2/4x2）通过 SaveLayer 外扩渲染，局部原点 l≈t 且 > 4dp。 */
+    int is_local_item_layer = (l >= 4.0f && l < 64.0f && fabsf(l - t) < 1.5f);
+    if (is_local_item_layer) return 0;
     int bar1 = w1 > 600.0f && h1 < 320.0f;
-    int bar2 = w2 > 600.0f && h2 < 320.0f;
-    /* 平板浮动 Dock：实测约 226 x 78（逻辑像素）。 */
-    int bar3 = h1 >= 50.0f && h1 <= 140.0f && w1 >= 150.0f && w1 <= 1600.0f;
-    int bar4 = h2 >= 50.0f && h2 <= 140.0f && w2 >= 150.0f && w2 <= 1600.0f;
-    return full1 || full2 || bar1 || bar2 || bar3 || bar4;
+    /* 平板浮动 Dock：实测 226x78 / 276.6x75.9（逻辑像素），短边 >= 65 且宽 >= 210。 */
+    int bar3 = h1 >= 65.0f && h1 <= 140.0f && w1 >= 210.0f && w1 <= 1600.0f;
+    return bar1 || bar3;
 }
 
 /* DrawHyperMaterial 替身：先按 0xc414dc 的推导找到 arena 栈顶 clip 记录，
