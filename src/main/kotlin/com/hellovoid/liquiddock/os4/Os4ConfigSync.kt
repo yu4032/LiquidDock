@@ -155,7 +155,11 @@ object Os4ConfigSync {
                 val passBlur = parts.getOrElse(2) { "" }
                 val renderGates = parts.getOrElse(3) { "" }
                 val recentsBlur = parts.getOrElse(4) { "" }
+                val launcherApkPath = runCatching {
+                    context.packageManager.getApplicationInfo("com.miui.home", 0).sourceDir.orEmpty()
+                }.getOrDefault("")
                 val lines = buildString {
+                    if (launcherApkPath.isNotEmpty()) append("launcher_apk_path=").append(launcherApkPath).append('\n')
                     if (gates.isNotEmpty()) append("glass_targets=").append(gates).append('\n')
                     if (probes.isNotEmpty()) append("glass_observers=").append(probes).append('\n')
                     if (passBlur.isNotEmpty()) append("passblur_target=").append(passBlur).append('\n')

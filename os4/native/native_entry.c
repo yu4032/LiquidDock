@@ -1806,6 +1806,16 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         LOGI("libapp.so not mapped yet");
         return;
     }
+    if (g_home_options.launcher_apk_path[0] != '\0' && lib.apk_path[0] != '\0' &&
+        strcmp(g_home_options.launcher_apk_path, lib.apk_path) != 0) {
+        static int stale_logged;
+        if (!stale_logged) {
+            stale_logged = 1;
+            ld_blog("STALE symbol targets rejected: conf=%s live=%s (waiting for Os4ConfigSync)",
+                    g_home_options.launcher_apk_path, lib.apk_path);
+        }
+        return;
+    }
     /* Install first: decode shared Dart field offsets and install rotation provider. */
     ld_dart_offsets_decode(&lib, g_home_options.home_opt_targets_present,
                            g_home_options.home_opt_vaddr, g_home_options.home_opt_size,

@@ -63,6 +63,7 @@ typedef struct {
     uint16_t  phnum;
     uint16_t  phentsize;
     size_t    page;         /* 系统页大小 */
+    char      apk_path[256]; /* 实际映射的 APK 路径，用于校验配置符号是否过期 */
 } ld_lib_info;
 
 /* ---------------- 页大小（缓存） ---------------- */
@@ -397,6 +398,7 @@ static bool ld_resolve_lib(const char *apk_path, const char *zip_entry, ld_lib_i
     out->phnum     = e_phnum;
     out->phentsize = e_phentsize;
     out->page      = ld_page_size();
+    snprintf(out->apk_path, sizeof out->apk_path, "%s", real);
 
     if (!ld_verify_load_layout(out, segs, nsegs)) { free(segs); return false; }
     free(segs);

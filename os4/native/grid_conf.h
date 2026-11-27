@@ -355,6 +355,7 @@ struct ld_grid_conf {
     int folder_title_anim_present;
     uint64_t folder_title_anim_vaddr[5];
     size_t folder_title_anim_size[5];
+    char launcher_apk_path[256];
 };
 
 static volatile int g_ws_is_laptop_mode __attribute__((used));
@@ -981,6 +982,12 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.divider_targets_present=1;
                     seen |= 1ull << 52;
+                } else if (strcmp(key, "launcher_apk_path") == 0) {
+                    size_t len = strlen(val);
+                    if (len == 0 || len >= sizeof c.launcher_apk_path || val[0] != '/') {
+                        bad = 1; break;
+                    }
+                    memcpy(c.launcher_apk_path, val, len + 1);
                 } else if (strcmp(key, "home_opt_targets") == 0) {
                     if ((seen & (1ull << 53)) ||
                         (!ld_grid_parse_aot_targets_max(val, c.home_opt_vaddr, c.home_opt_size, 16, 65536) &&

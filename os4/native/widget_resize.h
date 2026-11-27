@@ -87,14 +87,14 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
     if (g_home_options.home_opt_targets_present && g_home_options.home_opt_vaddr[14]) {
         uintptr_t cand = 0;
         if (ld_vaddr_to_runtime(lib, g_home_options.home_opt_vaddr[14], &cand) &&
-            executable_range(cand, 16)) {
+            executable_range(cand, 16) && *(const uint32_t *)cand == 0xa9bf79fdu) {
             fv = cand;
         }
     }
     if (g_home_options.home_opt_targets_present && g_home_options.home_opt_vaddr[15]) {
         uintptr_t cand = 0;
         if (ld_vaddr_to_runtime(lib, g_home_options.home_opt_vaddr[15], &cand) &&
-            executable_range(cand, 16)) {
+            executable_range(cand, 16) && *(const uint32_t *)cand == 0xa9bf79fdu) {
             fh = cand;
         }
     }
