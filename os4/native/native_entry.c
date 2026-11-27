@@ -182,19 +182,18 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "glass_filter_fingerprints.h"
 #include "glass_filter_hook.h"
 #include "glass_scope.h"
-static void *g_orig_home_pipeline;
-static size_t g_pipe_vars_fp_off = 0x18u;
-__attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
+static void *g_orig_home_pipeline __attribute__((used));
+__attribute__((used)) static void ld_post_home_pipeline(struct ld_ws_ctx *ws)
 {
-    /* The last field's original load/store is in the relocated instructions.
-     * Publish its identical compressed value before inspecting the fresh grid.
-     * No allocation or Dart call occurs before the vendor replays that store. */
-    uintptr_t variables=0,grid=c->x[1];
-    if(!(grid&1) || grid==c->x[22]
-            || !ld_read_heap(c->x[29]-g_pipe_vars_fp_off,&variables,8)
-            || !(variables&1) || variables==c->x[22]) return;
-    uint32_t compressed=(uint32_t)variables;
-    memcpy((void *)(grid+g_ld_off.gc_variables),&compressed,4);
+    if (!ws) return;
+    struct ld_dart_context ctx = {0};
+    ctx.x[22] = ws->x[22]; ctx.x[26] = ws->x[26];
+    ctx.x[27] = ws->x[27]; ctx.x[28] = ws->x[28];
+    struct ld_dart_context *c = &ctx;
+    uintptr_t grid = (uintptr_t)ws->ret_x0;
+    if (!(grid & 1u) || grid == c->x[22]) return;
+    uintptr_t variables = ld_heap_pointer(c, grid, g_ld_off.gc_variables);
+    if (!variables || variables == c->x[22]) return;
     struct ld_home_baseline baseline={0};
     int direction=ld_grid_direction(c,grid);
     if(direction==0 || direction==1)
@@ -223,7 +222,7 @@ __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_contex
         }
     }
 }
-LD_DART_OBSERVER(repl_home_pipeline,ld_observe_home_pipeline,g_orig_home_pipeline)
+LD_WS_POST_OBSERVER(repl_home_pipeline,ld_post_home_pipeline,g_orig_home_pipeline)
 #include "free_place_wrapper.h"
 static void *g_orig_no_vacant __attribute__((used));
 static volatile unsigned g_free_place_calls __attribute__((used));
@@ -1863,33 +1862,25 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         LD_HOME_PIPELINE_FUNCTION_OFFSET, ld_home_pipeline_words,
         sizeof ld_home_pipeline_words / sizeof(uint32_t), "home pipeline");
     if (pipe_fn && !g_orig_home_pipeline) {
-        uintptr_t pipe_hook = 0;
+        /* Decode gc_variables offset from the last GridConfig store before return:
+         *   ldur x0, [x29, #-simm9]; stur w0, [x1, #gc_variables]; mov x0, x1 */
         for (size_t off = 0; off < 0x400 && executable_range(pipe_fn + off, 12u); off += 4) {
             const uint32_t *p = (const uint32_t *)(pipe_fn + off);
-            /* Match last GridConfig store before return:
-             *   ldur x0, [x29, #-simm9]
-             *   stur w0, [x1, #gc_variables]
-             *   mov  x0, x1  (0xaa0103e0) */
             if ((p[0] & 0xffe00fffu) == 0xf84003a0u &&
                 (p[1] & 0xffe00fffu) == 0xb8000020u &&
                 p[2] == 0xaa0103e0u) {
-                int32_t fp_s9 = (int32_t)((p[0] >> 12) & 0x1ffu);
-                if (fp_s9 & 0x100) fp_s9 -= 512;
                 int32_t v_s9 = (int32_t)((p[1] >> 12) & 0x1ffu);
-                if (!(v_s9 & 0x100) && fp_s9 < 0 && fp_s9 >= -0x80 &&
-                    v_s9 >= 0x70 && v_s9 <= 0xb0) {
-                    g_pipe_vars_fp_off = (size_t)(-fp_s9);
+                if (!(v_s9 & 0x100) && v_s9 >= 0x70 && v_s9 <= 0xb0) {
                     g_ld_off.gc_variables = (size_t)v_s9;
-                    pipe_hook = pipe_fn + off;
                     break;
                 }
             }
         }
-        if (pipe_hook) {
-            int rc = api->hook((void *)pipe_hook, (void *)repl_home_pipeline, &g_orig_home_pipeline);
-            if (rc == 0 && g_orig_home_pipeline) pin_installed_hook(pipe_hook);
-            ld_blog("home pipeline observer installed at %p (fp=-0x%zx vars=0x%zx) result=%d",
-                    (void *)pipe_hook, g_pipe_vars_fp_off, g_ld_off.gc_variables, rc);
+        if (executable_range(pipe_fn, 16u)) {
+            int rc = api->hook((void *)pipe_fn, (void *)repl_home_pipeline, &g_orig_home_pipeline);
+            if (rc == 0 && g_orig_home_pipeline) pin_installed_hook(pipe_fn);
+            ld_blog("home pipeline prologue observer installed at %p (vars=0x%zx) result=%d",
+                    (void *)pipe_fn, g_ld_off.gc_variables, rc);
         }
     }
 
@@ -2064,6 +2055,17 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                                      (const uint32_t *)home_hooks[i].words, home_hooks[i].size / 4);
         }
         if (!fn) continue;
+        if (i == 6 || i == 9) {
+            /* dockWindowHeight & _defaultIconSize use prologue post-observers (no mid-function site). */
+            if (executable_range(fn, 16u)) {
+                int rc = api->hook((void *)fn, home_hooks[i].replace, home_hooks[i].orig);
+                if (rc == 0 && *home_hooks[i].orig) {
+                    pin_installed_hook(fn);
+                    ld_blog("home_opt[%zu] prologue observer installed at %p", i, (void *)fn);
+                }
+            }
+            continue;
+        }
         ld_install_dart_site_hook(api, fn, home_hooks[i].start, home_hooks[i].site,
                 (const uint32_t *)home_hooks[i].words, home_hooks[i].size,
                 home_hooks[i].replace, home_hooks[i].orig);

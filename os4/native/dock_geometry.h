@@ -93,16 +93,21 @@ __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_cont
         memcpy((void *)(params+0xb),&corner,8);
     }
 }
-__attribute__((used)) static void ld_observe_dock_spacing(struct ld_dart_context *c)
+__attribute__((used)) static void ld_post_dock_spacing(struct ld_ws_ctx *ws)
 {
-    if(!ld_dock_active(c) || g_home_options.dock.spacing==0) return;
-    uintptr_t size=c->x[0]; double width=0;
-    if(!(size&1) || ld_dart_is_ro_addr(size) || !ld_read_heap(size+7,&width,8)) return;
+    if (!ws || g_home_options.dock.spacing == 0) return;
+    struct ld_dart_context ctx = {0};
+    ctx.x[22] = ws->x[22]; ctx.x[26] = ws->x[26];
+    ctx.x[27] = ws->x[27]; ctx.x[28] = ws->x[28];
+    if (!ld_dock_active(&ctx)) return;
+    uintptr_t size = (uintptr_t)ws->ret_x0;
+    double width = 0;
+    if (!(size & 1u) || ld_dart_is_ro_addr(size) || !ld_read_heap(size + 7, &width, 8)) return;
     /* Legacy item decoration adds the configured distance to BOTH sides.
      * This Size is newly allocated on every _defaultIconSize invocation. */
-    width+=2*g_home_options.dock.spacing;
-    if(!isfinite(width) || width<1) return;
-    memcpy((void *)(size+7),&width,8);
+    width += 2.0 * g_home_options.dock.spacing;
+    if (!isfinite(width) || width < 1.0) return;
+    memcpy((void *)(size + 7), &width, 8);
 }
 static void *g_orig_dock_icon_padding __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_icon_padding(struct ld_dart_context *c)
@@ -166,22 +171,26 @@ __attribute__((used)) static void ld_observe_dock_container_height(struct ld_dar
     height+=dh;
     if(isfinite(height)) memcpy((void *)(box+7),&height,8);
 }
-__attribute__((used)) static void ld_observe_dock_window_height(struct ld_dart_context *c)
+__attribute__((used)) static void ld_post_dock_window_height(struct ld_ws_ctx *ws)
 {
-    double dh = ld_dock_effective_height_delta(c);
-    if(dh<=0) return;
-    double height=0; memcpy(&height,c->q[0],8);
-    height+=dh;
-    if(isfinite(height)) memcpy(c->q[0],&height,8);
+    if (!ws) return;
+    struct ld_dart_context ctx = {0};
+    ctx.x[22] = ws->x[22]; ctx.x[26] = ws->x[26];
+    ctx.x[27] = ws->x[27]; ctx.x[28] = ws->x[28];
+    double dh = ld_dock_effective_height_delta(&ctx);
+    if (dh <= 0.0 || !isfinite(dh)) return;
+    int64_t h = (int64_t)ws->ret_x0;
+    if (h < 10 || h > 2000) return;
+    ws->ret_x0 = (uint64_t)(h + (int64_t)ceil(dh));
 }
 #ifndef LD_DOCK_NO_BRIDGE
 LD_DART_OBSERVER(repl_dock_function_size,ld_observe_dock_function_size,g_orig_dock_function_size)
 LD_DART_OBSERVER(repl_dock_icon_padding,ld_observe_dock_icon_padding,g_orig_dock_icon_padding)
 LD_DART_OBSERVER(repl_dock_bottom,ld_observe_dock_bottom,g_orig_dock_bottom)
 LD_DART_OBSERVER(repl_dock_container_height,ld_observe_dock_container_height,g_orig_dock_container_height)
-LD_DART_OBSERVER(repl_dock_window_height,ld_observe_dock_window_height,g_orig_dock_window_height)
+LD_WS_POST_OBSERVER(repl_dock_window_height,ld_post_dock_window_height,g_orig_dock_window_height)
 LD_DART_OBSERVER(repl_dock_background,ld_observe_dock_background,g_orig_dock_background)
 LD_DART_OBSERVER(repl_dock_diff_bg,ld_observe_dock_background,g_orig_dock_diff_bg)
-LD_DART_OBSERVER(repl_dock_spacing,ld_observe_dock_spacing,g_orig_dock_spacing)
+LD_WS_POST_OBSERVER(repl_dock_spacing,ld_post_dock_spacing,g_orig_dock_spacing)
 #endif
 #endif
