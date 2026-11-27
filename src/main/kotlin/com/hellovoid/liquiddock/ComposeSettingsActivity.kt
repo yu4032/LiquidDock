@@ -3,6 +3,13 @@ package com.hellovoid.liquiddock
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.widget.Toast
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import com.hellovoid.liquiddock.os4.Os4RootConfWriter
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -693,6 +700,9 @@ private fun MoreHubPage(
     padding: PaddingValues,
     open: (Page) -> Unit,
 ) {
+    val context = LocalContext.current
+    var confirmClearWsAllApps by rememberSaveable { mutableStateOf(false) }
+    var clearingWsAllApps by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -714,6 +724,12 @@ private fun MoreHubPage(
                     title = "安全模式",
                     summary = "开启后下次重启桌面将跳过全部 Native Hook；关闭并重启桌面恢复正常",
                 )
+                ArrowPreference(
+                    title = "清空工作台全部应用数据库",
+                    summary = "清除工作台 AllApps 数据库与布局缓存并重启桌面（不影响普通模式桌面）",
+                    enabled = !clearingWsAllApps,
+                    onClick = { confirmClearWsAllApps = true },
+                )
             }
         }
         moreEntries.forEach { entry ->
@@ -725,6 +741,57 @@ private fun MoreHubPage(
                     modifier = Modifier.padding(horizontal = 14.dp),
                     page = entry.page,
                 )
+            }
+        }
+    }
+    AnimatedSettingsWindowDialog(
+        show = confirmClearWsAllApps,
+        title = "确认清空工作台全部应用数据库",
+        onDismissRequest = { confirmClearWsAllApps = false },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("将删除工作台 AllApps 数据库与布局缓存并重启桌面，下次进入工作台时自动重建。普通模式桌面布局不受影响。")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = { confirmClearWsAllApps = false },
+                    modifier = Modifier.weight(1f),
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                ) {
+                    Text("取消")
+                }
+                Button(
+                    onClick = {
+                        confirmClearWsAllApps = false
+                        clearingWsAllApps = true
+                        val appCtx = context.applicationContext
+                        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                        Thread {
+                            val ok = Os4RootConfWriter.clearWorkstationAllAppsDb()
+                            handler.post {
+                                clearingWsAllApps = false
+                                Toast.makeText(
+                                    appCtx,
+                                    if (ok) "已清空工作台全部应用数据库并重启桌面" else "清空失败，请检查 Root 权限",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }.start()
+                    },
+                    modifier = Modifier.weight(1f),
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                    destructive = true,
+                ) {
+                    Text("确认清空", color = Color.White)
+                }
             }
         }
     }

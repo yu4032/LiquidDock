@@ -51,4 +51,31 @@ internal object Os4RootConfWriter {
             false
         }
     }
+
+    fun clearWorkstationAllAppsDb(): Boolean {
+        return try {
+            val command = """
+                set -eu
+                am force-stop com.miui.home
+                sleep 0.5
+                rm -f \
+                    /data/user_de/0/com.miui.home/files/liquiddock-ws-layout-v3.bin \
+                    /data/user_de/0/com.miui.home/databases/laptop/launcher_rotatable*.db \
+                    /data/user_de/0/com.miui.home/databases/laptop/launcher_rotatable*.db-shm \
+                    /data/user_de/0/com.miui.home/databases/laptop/launcher_rotatable*.db-wal
+                echo RESULT_OK
+            """.trimIndent()
+            val process = ProcessBuilder("su", "-c", command)
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().readText().trim()
+            val success = process.waitFor() == 0 &&
+                output.lineSequence().any { it.trim() == "RESULT_OK" }
+            if (!success) Log.e(TAG, "Clear workstation AllApps DB failed: $output")
+            success
+        } catch (error: Throwable) {
+            Log.e(TAG, "Clear workstation AllApps DB failed", error)
+            false
+        }
+    }
 }
