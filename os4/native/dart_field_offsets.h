@@ -170,11 +170,15 @@ static void ld_dart_offsets_decode(const ld_lib_info *lib,
             const uint32_t *w = (const uint32_t *)fn;
             size_t n = home_opt_size[11] / 4u;
             for (size_t i = 0; i + 1 < n; i++) {
-                if (w[i] == 0xf9403f40u && (w[i + 1] & 0xffc003ffu) == 0xf9400000u) {
-                    uintptr_t goff = (uintptr_t)(((w[i + 1] >> 10) & 0xfffu) << 3);
-                    if (goff >= 0x100u && goff < 0x8000u) {
-                        g_ld_off.grid_ctrl_global_off = goff;
-                        break;
+                /* ldr xR, [x26, #0x78]; ldr xR2, [xR, #global_off] (register-agnostic) */
+                if ((w[i] & 0xffffffe0u) == 0xf9403f40u) {
+                    uint32_t r = w[i] & 31u;
+                    if ((w[i + 1] & 0xffc003e0u) == (0xf9400000u | (r << 5))) {
+                        uintptr_t goff = (uintptr_t)(((w[i + 1] >> 10) & 0xfffu) << 3);
+                        if (goff >= 0x100u && goff < 0x8000u) {
+                            g_ld_off.grid_ctrl_global_off = goff;
+                            break;
+                        }
                     }
                 }
             }

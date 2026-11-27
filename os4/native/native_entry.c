@@ -1829,6 +1829,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_w1x1_menu_install(api,&lib);
     ld_ws_resolve_page_fields(&lib);
     ld_workstation_install(api,&lib);
+    ld_dock_geometry_install_shared(api,&lib);
     int any_glass = g_home_options.glass_enabled || g_home_options.soft_glass_enabled;
     int se_on = any_glass && g_home_options.prismal.continuous_corners;
     ld_prismal_glass_install_ex(api, g_home_options.glass_enabled,
@@ -2041,10 +2042,10 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                 home_hooks[i].size / 4, "home_opt margin_bottom");
         } else if (g_home_options.home_opt_targets_present &&
                    (i == 2 || i == 3 || i == 6 || i == 7 || i == 8 || i == 9)) {
-            /* When ws_bg_sync (_DockBackgroundViewState._syncSpringToTarget) is hooked
+            /* When dock_bg_sync (_DockBackgroundViewState._syncSpringToTarget) is hooked
              * at prologue, it already handles all DockBgParams producers cleanly; skip
              * the brittle mid-function repl_dock_background / repl_dock_diff_bg hooks. */
-            if ((i == 7 || i == 8) && g_orig_ws_bg_sync) continue;
+            if ((i == 7 || i == 8) && g_orig_dock_bg_sync) continue;
             int opt_idx = (i == 2) ? 3 : (i == 3) ? 4 : (i == 6) ? 6 : (i == 7) ? 7 : (i == 8) ? 8 : 9;
             fn = ld_resolve_sym_prologue_or_aot(
                 &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
@@ -2302,7 +2303,7 @@ static void ld_write_hook_status(void) {
     int widgets_ok = (g_widget_init_miui_attr_installed && g_rv_hook_installed
             && g_pad_widget_glass_installed) ? 1 : 0;
     int grid_ok = g_layout_hooks_ready ? 1 : 0;
-    int dock_ok = ((g_orig_dock_background != NULL || g_orig_ws_bg_sync != NULL)
+    int dock_ok = ((g_orig_dock_background != NULL || g_orig_dock_bg_sync != NULL)
             && g_orig_dock_spacing != NULL) ? 1 : 0;
     int divider_ok = (g_dp_inner_orig != NULL && g_dp_bg_orig != NULL) ? 1 : 0;
     int recents_ok = g_recents_blur_installed ? 1 : 0;
