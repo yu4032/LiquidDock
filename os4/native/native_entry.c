@@ -2302,7 +2302,8 @@ static void ld_write_hook_status(void) {
     int widgets_ok = (g_widget_init_miui_attr_installed && g_rv_hook_installed
             && g_pad_widget_glass_installed) ? 1 : 0;
     int grid_ok = g_layout_hooks_ready ? 1 : 0;
-    int dock_ok = (g_orig_dock_background != NULL && g_orig_dock_spacing != NULL) ? 1 : 0;
+    int dock_ok = ((g_orig_dock_background != NULL || g_orig_ws_bg_sync != NULL)
+            && g_orig_dock_spacing != NULL) ? 1 : 0;
     int divider_ok = (g_dp_inner_orig != NULL && g_dp_bg_orig != NULL) ? 1 : 0;
     int recents_ok = g_recents_blur_installed ? 1 : 0;
     int home_icons_ok = (g_home_options.icon_size_enabled && g_orig_home_pipeline != NULL) ? 1 : 0;
