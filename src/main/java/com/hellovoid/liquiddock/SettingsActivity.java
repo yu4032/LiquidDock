@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import com.hellovoid.liquiddock.config.ConfigCodec;
+import com.hellovoid.liquiddock.os4.Os4DesktopLayoutBackup;
 
 public class SettingsActivity extends AppCompatActivity {
     private static final int WIDGET_HIDDEN_BACKUP_MAX_BYTES = 1024 * 1024;
@@ -37,6 +38,12 @@ public class SettingsActivity extends AppCompatActivity {
     private final ActivityResultLauncher<String[]> importConfigLauncher =
         registerForActivityResult(new ActivityResultContracts.OpenDocument(),
             uri -> { if (uri != null) importParameters(uri); });
+    private final ActivityResultLauncher<String> exportLayoutLauncher =
+        registerForActivityResult(new ActivityResultContracts.CreateDocument("application/zip"),
+            uri -> { if (uri != null) exportDesktopLayout(uri); });
+    private final ActivityResultLauncher<String[]> importLayoutLauncher =
+        registerForActivityResult(new ActivityResultContracts.OpenDocument(),
+            uri -> { if (uri != null) importDesktopLayout(uri); });
     private final ActivityResultLauncher<String> exportWidgetHiddenLauncher =
         registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
             uri -> { if (uri != null) exportWidgetHiddenRules(uri); });
@@ -69,6 +76,14 @@ public class SettingsActivity extends AppCompatActivity {
 
     void launchImport() {
         importConfigLauncher.launch(new String[]{"application/json", "text/json", "text/plain"});
+    }
+
+    void launchLayoutExport() {
+        exportLayoutLauncher.launch("LiquidDock-layout.zip");
+    }
+
+    void launchLayoutImport() {
+        importLayoutLauncher.launch(new String[]{"application/zip", "application/octet-stream", "*/*"});
     }
 
     void launchWidgetHiddenExport() {
@@ -124,6 +139,44 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             } catch (Exception e) {
                 showError("Import failed: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void exportDesktopLayout(Uri uri) {
+        new Thread(() -> {
+            try {
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+                int count = Os4DesktopLayoutBackup.exportLayout(this, prefs, uri);
+                runOnUiThread(() -> Toast.makeText(
+                    this,
+                    "桌面布局已备份（共 " + count + " 个文件，含自定义网格设置）",
+                    Toast.LENGTH_LONG
+                ).show());
+            } catch (Exception e) {
+                android.util.Log.e("LiquidDock-LayoutBackup", "exportDesktopLayout failed", e);
+                showError("备份桌面布局失败: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void importDesktopLayout(Uri uri) {
+        new Thread(() -> {
+            try {
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+                Os4DesktopLayoutBackup.RestoreSummary summary =
+                    Os4DesktopLayoutBackup.importLayout(this, prefs, uri);
+                LiquidDockApp.syncToRemote(prefs);
+                runOnUiThread(() -> {
+                    String msg = summary.getGridRestored()
+                        ? "已恢复桌面布局（" + summary.getFileCount() + " 个文件）及自定义网格设置，请手动重启桌面生效"
+                        : "已恢复桌面布局（" + summary.getFileCount() + " 个文件），请手动重启桌面生效";
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+                    recreate();
+                });
+            } catch (Exception e) {
+                android.util.Log.e("LiquidDock-LayoutBackup", "importDesktopLayout failed", e);
+                showError("恢复桌面布局失败: " + e.getMessage());
             }
         }).start();
     }

@@ -65,9 +65,10 @@ internal object Os4RootConfWriter {
                     /data/user_de/0/com.miui.home/databases/laptop/launcher_rotatable*.db-wal
                 echo RESULT_OK
             """.trimIndent()
-            val process = ProcessBuilder("su", "-c", command)
+            val process = ProcessBuilder("su", "-c", "nsenter -t 1 -m -- sh -eu")
                 .redirectErrorStream(true)
                 .start()
+            process.outputStream.use { it.write((command + "\n").toByteArray(Charsets.UTF_8)) }
             val output = process.inputStream.bufferedReader().readText().trim()
             val success = process.waitFor() == 0 &&
                 output.lineSequence().any { it.trim() == "RESULT_OK" }

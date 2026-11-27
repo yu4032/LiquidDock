@@ -42,6 +42,21 @@ internal fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity)
                 ArrowPreference("导入参数", summary = "校验并恢复参数；完成后自动重启桌面", onClick = activity::launchImport)
             }
         }
+        item { SmallTitle("桌面布局") }
+        item {
+            SettingsCard {
+                ArrowPreference(
+                    "备份桌面布局",
+                    summary = "导出普通桌面与工作台布局数据库，同时记录自定义网格设置（ZIP）",
+                    onClick = activity::launchLayoutExport,
+                )
+                ArrowPreference(
+                    "恢复桌面布局",
+                    summary = "还原桌面布局数据库并同步恢复自定义网格设置（恢复后请手动重启桌面）",
+                    onClick = activity::launchLayoutImport,
+                )
+            }
+        }
     }
     AnimatedSettingsWindowDialog(
         show = confirmDefaultReset,
