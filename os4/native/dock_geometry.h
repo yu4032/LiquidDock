@@ -20,18 +20,18 @@ static int ld_dock_active(struct ld_dart_context *c)
     if (!controller) return 0;
 
     uintptr_t rx = ld_heap_pointer(c, controller, ld_get_grid_rx_offset());
-    uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
-    uintptr_t variables = grid ? ld_heap_pointer(c, grid, 0x8f) : 0;
-    uintptr_t orientation = variables ? ld_heap_pointer(c, variables, 0x23) : 0;
+    uintptr_t grid = rx ? ld_heap_pointer(c, rx, g_ld_off.rx_value) : 0;
+    uintptr_t variables = grid ? ld_heap_pointer(c, grid, g_ld_off.gc_variables) : 0;
+    uintptr_t orientation = variables ? ld_heap_pointer(c, variables, g_ld_off.gv_orientation) : 0;
     int64_t direction = orientation ? ld_heap_i64(orientation, 7) : -1;
     uint32_t mode = 0;
     if (!rx || !grid || !variables || !orientation || (direction != 0 && direction != 1)) return 0;
-    if (!ld_read_heap(variables + 0x27, &mode, 4) || !(mode & 1)) return 0;
+    if (!ld_read_heap(variables + g_ld_off.gv_layout_mode, &mode, 4) || !(mode & 1)) return 0;
 
     if (ld_is_fullscreen_layout(c, mode)) return 1;
 
     if (g_grid_cols > 0 && g_grid_rows > 0) {
-        int64_t cl = ld_heap_i64(grid, 0x1b), r = ld_heap_i64(grid, 0x23);
+        int64_t cl = ld_heap_i64(grid, g_ld_off.gc_cols), r = ld_heap_i64(grid, g_ld_off.gc_rows);
         if ((direction == 1 && cl == g_grid_cols && r == g_grid_rows) ||
             (direction == 0 && cl == g_grid_rows && r == g_grid_cols)) {
             return 1;
@@ -148,8 +148,12 @@ static inline double ld_dock_effective_height_delta(struct ld_dart_context *c)
         g_home_options.ws.dock_height != 0.0) {
         return g_home_options.ws.dock_height;
     }
-    if (g_home_options.dock.height > 0.0 && ld_dock_active(c)) {
-        return g_home_options.dock.height;
+    if (g_home_options.dock.enabled && ld_dock_active(c)) {
+        double dh = g_home_options.dock.height > 0.0 ? g_home_options.dock.height : 0.0;
+        if (g_home_options.dock_icon_size_percent > 100) {
+            dh += 58.1 * ((double)(g_home_options.dock_icon_size_percent - 100) / 100.0);
+        }
+        return dh;
     }
     return 0.0;
 }

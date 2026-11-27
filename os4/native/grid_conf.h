@@ -299,8 +299,8 @@ struct ld_grid_conf {
     uint64_t divider_vaddr[2];
     size_t divider_size[2];
     int home_opt_targets_present;
-    uint64_t home_opt_vaddr[11];
-    size_t home_opt_size[11];
+    uint64_t home_opt_vaddr[16];
+    size_t home_opt_size[16];
     int layout_extra_targets_present;
     uint64_t layout_extra_vaddr[7];
     size_t layout_extra_size[7];
@@ -983,7 +983,9 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     seen |= 1ull << 52;
                 } else if (strcmp(key, "home_opt_targets") == 0) {
                     if ((seen & (1ull << 53)) ||
-                        !ld_grid_parse_aot_targets_max(val, c.home_opt_vaddr, c.home_opt_size, 11, 65536)) {
+                        (!ld_grid_parse_aot_targets_max(val, c.home_opt_vaddr, c.home_opt_size, 16, 65536) &&
+                         !ld_grid_parse_aot_targets_max(val, c.home_opt_vaddr, c.home_opt_size, 13, 65536) &&
+                         !ld_grid_parse_aot_targets_max(val, c.home_opt_vaddr, c.home_opt_size, 11, 65536))) {
                         bad=1; break;
                     }
                     c.home_opt_targets_present=1;

@@ -316,17 +316,22 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
             uintptr_t site = ld_resolve_folder_entry(
                 lib, 1, 0x932cc8u, ld_pat_folder_cal_grid_width,
                 sizeof ld_pat_folder_cal_grid_width / sizeof(uint32_t), &via);
-            if (site && executable_range(site, 24u)) {
-                uint32_t insn4 = ((const uint32_t *)site)[4];
-                uint32_t insn5 = ((const uint32_t *)site)[5];
-                if (insn4 == 0xf9403f40u && (insn5 & 0xffc003ffu) == 0xf9400000u) {
-                    uint32_t field_off = ((insn5 >> 10) & 0xfffu) << 3;
-                    if (field_off != 0) {
-                        __atomic_store_n(&g_folder_col_field_off, field_off, __ATOMIC_RELEASE);
-                        ld_blog("OS4 folder grid resolved col_field_off=0x%x", field_off);
-                        if (ld_install_folder_site(api, site, (void *)repl_folder_sync_cal_grid_width,
-                                                   &g_orig_folder_cal_grid_width, "calGridWidth.sync", via)) ok++;
+            if (site && executable_range(site, 96u)) {
+                const uint32_t *insns = (const uint32_t *)site;
+                uint32_t field_off = 0;
+                /* Scan prologue/body for ldr x0, [x26, #0x78]; ldr x0, [x0, #uimm]
+                 * instead of indexing insns[4] / insns[5] directly. */
+                for (size_t i = 0; i + 1 < 24u; i++) {
+                    if (insns[i] == 0xf9403f40u && (insns[i + 1] & 0xffc003ffu) == 0xf9400000u) {
+                        field_off = ((insns[i + 1] >> 10) & 0xfffu) << 3;
+                        if (field_off != 0) break;
                     }
+                }
+                if (field_off != 0) {
+                    __atomic_store_n(&g_folder_col_field_off, field_off, __ATOMIC_RELEASE);
+                    ld_blog("OS4 folder grid resolved col_field_off=0x%x", field_off);
+                    if (ld_install_folder_site(api, site, (void *)repl_folder_sync_cal_grid_width,
+                                               &g_orig_folder_cal_grid_width, "calGridWidth.sync", via)) ok++;
                 } else {
                     ld_blog("OS4 folder grid calGridWidth semantic mismatch at %p (via=%s)", (void *)site, via ? via : "?");
                 }

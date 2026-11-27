@@ -401,7 +401,7 @@ static int ld_ws_page_scope(const struct ld_dart_context *c)
 
     uintptr_t rx = ld_heap_pointer(c, c->x[1], g_ws_page_list_field);
     uintptr_t list = ld_heap_pointer(c, rx, g_page_fields.rx_value);
-    if (!list || ((ld_heap_u32(list, (size_t)-1) >> 12) & 0xfffff) != 0x5c) return -1;
+    if (!list || ((ld_heap_u32(list, (size_t)-1) >> 12) & 0xfffff) != LD_CID_GROWABLE_LIST) return -1;
     uint32_t length = ld_heap_u32(list, 0xb);
     if ((length & 1u) || index >= (length >> 1) || length > 200u) return -1;
     uintptr_t array = ld_heap_pointer(c, list, 0xf);
@@ -409,7 +409,7 @@ static int ld_ws_page_scope(const struct ld_dart_context *c)
     uintptr_t layout = ld_heap_pointer(c, screen, g_page_fields.layout);
     uintptr_t items = ld_heap_pointer(c, layout, g_page_fields.items);
     int64_t container = 0;
-    if (items && ((ld_heap_u32(items, (size_t)-1) >> 12) & 0xfffff) == 0x5c &&
+    if (items && ((ld_heap_u32(items, (size_t)-1) >> 12) & 0xfffff) == LD_CID_GROWABLE_LIST &&
         ld_heap_u32(items, 0xb) >= 2u) {
         uintptr_t cells = ld_heap_pointer(c, items, 0xf);
         uintptr_t cell = ld_heap_pointer(c, cells, 0xf);
@@ -619,8 +619,10 @@ __attribute__((used)) static void ld_ws_on_dock_build_content(struct ld_ws_ctx *
 
 __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx *c)
 {
-    if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
-    if (!g_home_options.ws.dock_custom) return;
+    int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    int normal_dock_h = (!is_laptop && g_hook_pin_ok && g_home_options.dock.enabled &&
+                         g_home_options.dock.height != 0.0 && isfinite(g_home_options.dock.height));
+    if (!normal_dock_h && (!is_laptop || !g_home_options.ws.dock_custom)) return;
     uintptr_t stack = (uintptr_t)c->ret_x0;
     if (!(stack & 1)) return;
     struct ld_dart_context dc;
@@ -639,9 +641,34 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
     uintptr_t data = ld_heap_pointer(&dc, list, 0xf);
     if (!data) return;
     uintptr_t pos1 = ld_heap_pointer(&dc, data, 0x13);
+    uintptr_t pos0 = ld_heap_pointer(&dc, data, 0xf);
+    uintptr_t pad0 = pos0 ? ld_heap_pointer(&dc, pos0, 0xb) : 0;
+    uintptr_t align0 = pad0 ? ld_heap_pointer(&dc, pad0, 0xb) : 0;
+    uintptr_t sized0 = align0 ? ld_heap_pointer(&dc, align0, 0xb) : 0;
+    if (normal_dock_h) {
+        /* Expand/shrink the Dock background SizedBox container in Normal mode too,
+         * otherwise SizedBox tightly clamps DockBackgroundView height in landscape. */
+        if (sized0 && !ld_ws_is_const_ro(sized0)) {
+            uintptr_t h_box = ld_heap_pointer(&dc, sized0, 0x13);
+            double h_val = 0.0;
+            if (h_box && !ld_ws_is_const_ro(h_box) &&
+                ld_read_heap(h_box + 7, &h_val, 8) && isfinite(h_val) &&
+                h_val >= 16.0 && h_val <= 240.0) {
+                static uintptr_t s_last_norm_hbox;
+                static double s_last_norm_hout;
+                if (!(h_box == s_last_norm_hbox && fabs(h_val - s_last_norm_hout) < 0.01)) {
+                    double next_h = h_val + g_home_options.dock.height;
+                    if (isfinite(next_h) && next_h >= 16.0 && next_h <= 320.0) {
+                        memcpy((void *)(h_box + 7), &next_h, sizeof next_h);
+                        s_last_norm_hbox = h_box;
+                        s_last_norm_hout = next_h;
+                    }
+                }
+            }
+        }
+        return;
+    }
     if (g_home_options.ws.dock_custom) {
-        uintptr_t pos0 = ld_heap_pointer(&dc, data, 0xf);
-        uintptr_t pad0 = pos0 ? ld_heap_pointer(&dc, pos0, 0xb) : 0;
         uintptr_t mb_box = pos1 ? ld_heap_pointer(&dc, pos1, 0x1f) : 0;
         if (pos0 && !ld_ws_is_const_ro(pos0) && mb_box) {
             uint32_t mb_cptr = (uint32_t)mb_box;
@@ -652,8 +679,6 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
                 memcpy((void *)(insets0 + 0x1f), &zero, sizeof zero);
             }
         }
-        uintptr_t align0 = pad0 ? ld_heap_pointer(&dc, pad0, 0xb) : 0;
-        uintptr_t sized0 = align0 ? ld_heap_pointer(&dc, align0, 0xb) : 0;
         if (g_home_options.ws.taskbar_mode) {
             uintptr_t w_box = sized0 ? ld_heap_pointer(&dc, sized0, 0xf) : 0;
             double w_val = 0.0;
@@ -749,13 +774,89 @@ __attribute__((used)) static void ld_ws_on_bg_strategy(struct ld_dart_context *c
     memcpy(c->q[0], &zero, sizeof zero);
 }
 
+static void *g_orig_ws_pad_dock_height __attribute__((used));
+static volatile uint64_t g_ws_last_norm_bg_h_bits __attribute__((used));
+
+/* _HotseatWidgetPadState.build closure computes SizedBox(height: iconSize * 1.35)
+ * (~78.4dp) around Stack(DockBackgroundView, DockItems). In landscape, full-size
+ * (or scaled) dock icons + dock.height exceed 78.4dp and get hard-clamped here. */
+__attribute__((used)) static void ld_ws_on_pad_dock_height(struct ld_dart_context *c)
+{
+    double orig_h = 0.0;
+    memcpy(&orig_h, c->q[2], sizeof orig_h);
+    if (!isfinite(orig_h) || orig_h < 16.0 || orig_h > 300.0) return;
+
+    int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    double need = orig_h;
+    if (is_laptop) {
+        if (g_home_options.ws.dock_custom && g_home_options.ws.taskbar_mode &&
+            g_home_options.ws.dock_height > 0.0 && isfinite(g_home_options.ws.dock_height)) {
+            need = orig_h + g_home_options.ws.dock_height;
+        }
+    } else if (g_hook_pin_ok && g_home_options.dock.enabled) {
+        double dh = g_home_options.dock.height > 0.0 ? g_home_options.dock.height : 0.0;
+        double icon_extra = g_home_options.dock_icon_size_percent > 100
+            ? 58.1 * ((double)(g_home_options.dock_icon_size_percent - 100) / 100.0)
+            : 0.0;
+        if (dh > 0.0 || icon_extra > 0.0) {
+            need = fmax(need, orig_h + dh + icon_extra);
+        }
+        uint64_t bg_bits = __atomic_load_n(&g_ws_last_norm_bg_h_bits, __ATOMIC_RELAXED);
+        if (bg_bits) {
+            double bg_h = 0.0;
+            memcpy(&bg_h, &bg_bits, sizeof bg_h);
+            if (isfinite(bg_h) && bg_h > need && bg_h < 320.0) {
+                need = bg_h;
+            }
+        }
+    }
+    if (need > orig_h + 0.01 && need < 320.0) {
+        memcpy(c->q[2], &need, sizeof need);
+    }
+}
+LD_DART_OBSERVER(repl_ws_pad_dock_height, ld_ws_on_pad_dock_height, g_orig_ws_pad_dock_height)
+
 __attribute__((used)) static void ld_ws_on_bg_sync(struct ld_dart_context *c)
 {
-    if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
-    if (!g_home_options.ws.dock_custom) return;
     uintptr_t params = c->x[2];
     if (!(params & 1)) return;
     uintptr_t size = ld_heap_pointer(c, params, 7);
+    if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) {
+        /* Normal-mode Dock background width/height/corner handled at this single
+         * prologue sink so all DockBgParams producers (_recomputeDockBgParams,
+         * _applyDiffWithAnimation, _calcMinOneItemBgParams) stay in sync without
+         * fragile mid-function offsets. */
+        const struct ld_dock_conf *o = &g_home_options.dock;
+        if (!g_hook_pin_ok || !o->enabled || (o->width == 0.0 && o->height == 0.0 && o->corner == 0.0)) return;
+        if (!size) return;
+        double sw = 0.0, sh = 0.0, cr = 0.0;
+        if (!ld_read_heap(size + 7, &sw, sizeof sw) ||
+            !ld_read_heap(size + 0xf, &sh, sizeof sh) ||
+            !ld_read_heap(params + 0xb, &cr, sizeof cr)) return;
+        static uintptr_t s_last_norm_size;
+        static double s_last_norm_w, s_last_norm_h;
+        if (size == s_last_norm_size && fabs(sw - s_last_norm_w) < 0.01 && fabs(sh - s_last_norm_h) < 0.01) {
+            return;
+        }
+        double nw = sw + o->width, nh = sh + o->height, nr = cr + o->corner;
+        if (!isfinite(nw) || !isfinite(nh) || !isfinite(nr) || nw < 1.0 || nh < 1.0) return;
+        if (o->corner != 0.0 && nr < 1.0) nr = 1.0;
+        if (!ld_ws_is_const_ro(size)) {
+            memcpy((void *)(size + 7), &nw, sizeof nw);
+            memcpy((void *)(size + 0xf), &nh, sizeof nh);
+            s_last_norm_size = size;
+            s_last_norm_w = nw;
+            s_last_norm_h = nh;
+            uint64_t nh_bits = 0;
+            memcpy(&nh_bits, &nh, sizeof nh_bits);
+            __atomic_store_n(&g_ws_last_norm_bg_h_bits, nh_bits, __ATOMIC_RELAXED);
+        }
+        if (o->corner != 0.0 && !ld_ws_is_const_ro(params)) {
+            memcpy((void *)(params + 0xb), &nr, sizeof nr);
+        }
+        return;
+    }
+    if (!g_home_options.ws.dock_custom) return;
     double p_b = 0.0, sw = 0.0, sh = 0.0;
     ld_read_heap(params + 0xb, &p_b, sizeof p_b);
     if (size) {
@@ -1085,12 +1186,22 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
         }
     }
     if (g_home_options.ws_allapps_ind_vaddr) {
-        uintptr_t ind_fn = 0;
-        uint64_t target_vaddr = g_home_options.ws_allapps_ind_vaddr + g_home_options.ws_allapps_ind_size;
-        if (ld_vaddr_to_runtime(lib, target_vaddr, &ind_fn) &&
-            executable_range(ind_fn, 64) && ld_hook_site_safe(ind_fn, "ws_allapps_ind")) {
-            if (api->hook((void *)ind_fn, (void *)repl_ws_allapps_ind, &g_orig_ws_allapps_ind) == 0) {
-                ok_count++;
+        uintptr_t ind_base = 0;
+        uint64_t target_vaddr = (g_home_options.ws_allapps_ind_vaddr + g_home_options.ws_allapps_ind_size + 3u) & ~3ull;
+        if (ld_vaddr_to_runtime(lib, target_vaddr, &ind_base) && executable_range(ind_base, 0x80u)) {
+            /* Scan forward for the Dart closure prologue (stp x29, x30, [x15, #-0x10]!)
+             * instead of blindly trusting vaddr + size alignment. */
+            uintptr_t ind_fn = 0;
+            for (size_t off = 0; off <= 0x40u; off += 4u) {
+                if (*(const uint32_t *)(ind_base + off) == 0xa9bf79fdu) {
+                    ind_fn = ind_base + off;
+                    break;
+                }
+            }
+            if (ind_fn && executable_range(ind_fn, 64) && ld_hook_site_safe(ind_fn, "ws_allapps_ind")) {
+                if (api->hook((void *)ind_fn, (void *)repl_ws_allapps_ind, &g_orig_ws_allapps_ind) == 0) {
+                    ok_count++;
+                }
             }
         }
     }
@@ -1112,6 +1223,37 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
         if (ld_vaddr_to_runtime(lib, g_home_options.ws_cal_offset_vaddr, &co_fn) &&
             executable_range(co_fn, 64) && ld_hook_site_safe(co_fn, "ws_cal_offset")) {
             if (api->hook((void *)co_fn, (void *)repl_ws_cal_offset, &g_orig_ws_cal_offset) == 0) {
+                ok_count++;
+            }
+        }
+    }
+    if (g_home_options.home_opt_targets_present &&
+        g_home_options.home_opt_vaddr[12] && !g_orig_ws_pad_dock_height) {
+        uintptr_t pb_fn = 0;
+        if (ld_vaddr_to_runtime(lib, g_home_options.home_opt_vaddr[12], &pb_fn) &&
+            executable_range(pb_fn, 0x1000u)) {
+            const uint32_t *insns = (const uint32_t *)pb_fn;
+            uintptr_t site = 0;
+            for (size_t i = 4; i + 16 < 0x400u; i++) {
+                /* fmul d2, d0, d1 preceded by ldur d0, [x1, #0x17] */
+                if (insns[i] != 0x1e610802u) continue;
+                int has_ldur = 0;
+                for (size_t k = 1; k <= 4; k++) {
+                    if (insns[i - k] == 0xfc417020u) { has_ldur = 1; break; }
+                }
+                if (!has_ldur) continue;
+                for (size_t j = 1; j <= 14; j++) {
+                    if (insns[i + j] == 0xfc007022u) { /* stur d2, [x1, #7] */
+                        site = (uintptr_t)&insns[i + j];
+                        break;
+                    }
+                }
+                if (site) break;
+            }
+            if (site && ld_hook_site_safe(site, "pad_dock_height") &&
+                api->hook((void *)site, (void *)repl_ws_pad_dock_height, &g_orig_ws_pad_dock_height) == 0) {
+                ld_blog("dock pad height ceiling hook installed at %p (+0x%lx)",
+                        (void *)site, (unsigned long)(site - pb_fn));
                 ok_count++;
             }
         }

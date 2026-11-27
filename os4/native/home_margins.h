@@ -213,7 +213,7 @@ static const struct ld_hm_note *ld_hm_lookup(uintptr_t cfg, uintptr_t x28)
     if (used > 8u) used = 8u;
     for (unsigned i = 0; i < used; i++)
         if (g_hm_notes[i].cfg == cfg) return &g_hm_notes[i];
-    uintptr_t vars = ld_hm_ptr(cfg, 0x8f, x28);
+    uintptr_t vars = ld_hm_ptr(cfg, g_ld_off.gc_variables, x28);
     if (vars)
         for (unsigned i = 0; i < used; i++)
             if (g_hm_notes[i].cfg == vars) return &g_hm_notes[i];
@@ -329,7 +329,7 @@ static uintptr_t ld_hm_oy_box(uintptr_t x28, uintptr_t x26)
     __builtin_memcpy(&ctrl, (const void *)(fields + g_hm_ctrl_offset), sizeof ctrl);
     if (!ctrl) return 0;
     uintptr_t rx = ld_hm_ptr(ctrl, g_hm_oy_offset, x28);
-    return rx ? ld_hm_ptr(rx, 0x13, x28) : 0;
+    return rx ? ld_hm_ptr(rx, g_ld_off.rx_value, x28) : 0;
 }
 
 /* 只对“和左侧 originX 同一种对象”的 box 动手：左侧 box 已验证可写。 */
@@ -355,11 +355,11 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
 
     /* Follow the launcher orientation enum. GridConfig dimensions may be
      * transposed on tablets and must not override the physical orientation. */
-    uintptr_t variables = ld_hm_ptr(cfg, 0x8f, x28);
-    uintptr_t vo = ld_hm_ptr(variables, 0x23, x28);
+    uintptr_t variables = ld_hm_ptr(cfg, g_ld_off.gc_variables, x28);
+    uintptr_t vo = ld_hm_ptr(variables, g_ld_off.gv_orientation, x28);
     int64_t cfg_cols = 0, cfg_rows = 0, dir_raw = -1;
-    __builtin_memcpy(&cfg_cols, (const void *)(cfg + 0x1b), sizeof cfg_cols);
-    __builtin_memcpy(&cfg_rows, (const void *)(cfg + 0x23), sizeof cfg_rows);
+    __builtin_memcpy(&cfg_cols, (const void *)(cfg + g_ld_off.gc_cols), sizeof cfg_cols);
+    __builtin_memcpy(&cfg_rows, (const void *)(cfg + g_ld_off.gc_rows), sizeof cfg_rows);
     if (vo) __builtin_memcpy(&dir_raw, (const void *)(vo + 7), sizeof dir_raw);
 
     int landscape = -1, cols = 0, rows = 0;
@@ -426,7 +426,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         return (void *)cfg;
     }
     double cell_w_now = 0;
-    __builtin_memcpy(&cell_w_now, (const void *)(cfg + 0x2b), sizeof cell_w_now);
+    __builtin_memcpy(&cell_w_now, (const void *)(cfg + g_ld_off.gc_cell_w), sizeof cell_w_now);
     static int last_land = -1, last_cols = -1, last_rows = -1;
     if (landscape != last_land || cols != last_cols || rows != last_rows) {
         last_land = landscape; last_cols = cols; last_rows = rows;
@@ -458,11 +458,11 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
 
     int mode_idx = is_laptop ? 1 : 0;
     int bi = landscape ? 0 : 1;
-    uintptr_t box0 = ld_hm_ptr(cfg, 0x3b, x28);
+    uintptr_t box0 = ld_hm_ptr(cfg, g_ld_off.gc_origin, x28);
     double cw_now = 0, ch_now = 0, ox_now = 0, ind_now = 0;
-    __builtin_memcpy(&cw_now, (const void *)(cfg + 0x2b), sizeof cw_now);
-    __builtin_memcpy(&ch_now, (const void *)(cfg + 0x33), sizeof ch_now);
-    __builtin_memcpy(&ind_now, (const void *)(cfg + 0x4b), sizeof ind_now);
+    __builtin_memcpy(&cw_now, (const void *)(cfg + g_ld_off.gc_cell_w), sizeof cw_now);
+    __builtin_memcpy(&ch_now, (const void *)(cfg + g_ld_off.gc_cell_h), sizeof ch_now);
+    __builtin_memcpy(&ind_now, (const void *)(cfg + g_ld_off.gc_dock_h), sizeof ind_now);
     if (box0) __builtin_memcpy(&ox_now, (const void *)(box0 + 7), sizeof ox_now);
     double oy_now = 0;
     int oy_ok = 0;
@@ -558,7 +558,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         base->oy = oy_ok ? oy_now : 0.0;
         base->oy_valid = oy_ok;
         base->ind = 0;
-        __builtin_memcpy(&base->ind, (const void *)(cfg + 0x4b), sizeof base->ind);
+        __builtin_memcpy(&base->ind, (const void *)(cfg + g_ld_off.gc_dock_h), sizeof base->ind);
         base->bi = bi;
         base->cols = cols;
         base->rows = rows;
@@ -582,13 +582,13 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     }
     if (n == 0u || n == 1000u || n == 100000u) {
         double cw = 0, ch = 0;
-        __builtin_memcpy(&cw, (const void *)(cfg + 0x2b), sizeof cw);
-        __builtin_memcpy(&ch, (const void *)(cfg + 0x33), sizeof ch);
+        __builtin_memcpy(&cw, (const void *)(cfg + g_ld_off.gc_cell_w), sizeof cw);
+        __builtin_memcpy(&ch, (const void *)(cfg + g_ld_off.gc_cell_h), sizeof ch);
         ld_blog("home margin currentConfig #%u ptr=%p mode=%d dir=%d cellW=%.2f cellH=%.2f",
                 n + 1u, (void *)cfg, mode_idx, landscape, cw, ch);
     }
     double cw_cur = 0;
-    __builtin_memcpy(&cw_cur, (const void *)(cfg + 0x2b), sizeof cw_cur);
+    __builtin_memcpy(&cw_cur, (const void *)(cfg + g_ld_off.gc_cell_w), sizeof cw_cur);
     /* The lookup above accepts either the native geometry or this hook's last
      * output. This keeps mode/page transitions idempotent while rejecting
      * unrelated configs before they can become a baseline. */
@@ -613,8 +613,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         double cw = base->cw - 2.0 * dh / (double)cols;
         double ox = base->ox + dh;
         if (isfinite(cw) && isfinite(ox) && cw > 1.0) {
-            if (cw_cur != cw && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + 0x2b), &cw, sizeof cw);
-            uintptr_t box = ld_hm_ptr(cfg, 0x3b, x28);
+            if (cw_cur != cw && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + g_ld_off.gc_cell_w), &cw, sizeof cw);
+            uintptr_t box = ld_hm_ptr(cfg, g_ld_off.gc_origin, x28);
             if (box) {
                 double curx = 0;
                 __builtin_memcpy(&curx, (const void *)(box + 7), sizeof curx);
@@ -636,8 +636,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         double oy = base->oy + dt;
         if (isfinite(ch) && isfinite(oy) && ch > 1.0) {
             double ch_cur = 0;
-            __builtin_memcpy(&ch_cur, (const void *)(cfg + 0x33), sizeof ch_cur);
-            if (ch_cur != ch && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
+            __builtin_memcpy(&ch_cur, (const void *)(cfg + g_ld_off.gc_cell_h), sizeof ch_cur);
+            if (ch_cur != ch && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + g_ld_off.gc_cell_h), &ch, sizeof ch);
             uintptr_t oybox = ld_hm_oy_box(x28, x26);
             /* The active-config listener publishes this inset to originY.
              * Keep it in sync so the next rotation publish sees the same value. */
@@ -686,17 +686,17 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         double ind = base->ind + di;
         if (isfinite(ind)) {
             double ind_cur = 0;
-            __builtin_memcpy(&ind_cur, (const void *)(cfg + 0x4b), sizeof ind_cur);
-            if (ind_cur != ind && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + 0x4b), &ind, sizeof ind);
+            __builtin_memcpy(&ind_cur, (const void *)(cfg + g_ld_off.gc_dock_h), sizeof ind_cur);
+            if (ind_cur != ind && !ld_dart_is_ro_addr(cfg)) __builtin_memcpy((void *)(cfg + g_ld_off.gc_dock_h), &ind, sizeof ind);
             if ((di != 0.0 || ind_cur != ind) && (n % 500u) == 0u)
                 ld_blog("home margin indicator mode=%d dir=%d ind %.2f->%.2f dy=%.1f",
                         mode_idx, landscape, base->ind, ind, di);
         }
     }
     double out_cw = 0, out_ox = 0, out_ch = 0, out_ind = 0;
-    __builtin_memcpy(&out_cw, (const void *)(cfg + 0x2b), sizeof out_cw);
-    __builtin_memcpy(&out_ch, (const void *)(cfg + 0x33), sizeof out_ch);
-    __builtin_memcpy(&out_ind, (const void *)(cfg + 0x4b), sizeof out_ind);
+    __builtin_memcpy(&out_cw, (const void *)(cfg + g_ld_off.gc_cell_w), sizeof out_cw);
+    __builtin_memcpy(&out_ch, (const void *)(cfg + g_ld_off.gc_cell_h), sizeof out_ch);
+    __builtin_memcpy(&out_ind, (const void *)(cfg + g_ld_off.gc_dock_h), sizeof out_ind);
     if (isfinite(out_cw) && isfinite(out_ch) &&
         out_cw > 10.0 && out_cw < 2000.0 && out_ch > 10.0 && out_ch < 2000.0) {
         g_hm_active_cw = out_cw;
@@ -704,7 +704,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     }
     int out_geometry_valid = isfinite(out_cw) && isfinite(out_ch) && isfinite(out_ind);
     if (box0) {
-        uintptr_t out_box = ld_hm_ptr(cfg, 0x3b, x28);
+        uintptr_t out_box = ld_hm_ptr(cfg, g_ld_off.gc_origin, x28);
         if (out_box) __builtin_memcpy(&out_ox, (const void *)(out_box + 7), sizeof out_ox);
         else out_geometry_valid = 0;
     } else {

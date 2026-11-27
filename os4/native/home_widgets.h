@@ -94,23 +94,23 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
     if (!ld_read_heap(c->x[26] + 0x78, &globals, sizeof globals)
             || !globals || (globals & 1) || !controller) return;
     uintptr_t rx = ld_heap_pointer(c, controller, ld_get_grid_rx_offset());
-    uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
+    uintptr_t grid = rx ? ld_heap_pointer(c, rx, g_ld_off.rx_value) : 0;
     if (!grid) return;
     int direction = ld_grid_direction(c, grid);
     if (direction < 0 || direction > 1) return;
-    int64_t cols = ld_heap_i64(grid, 0x1b), rows = ld_heap_i64(grid, 0x23);
+    int64_t cols = ld_heap_i64(grid, g_ld_off.gc_cols), rows = ld_heap_i64(grid, g_ld_off.gc_rows);
     if (cols != (direction ? g_grid_cols : g_grid_rows)
             || rows != (direction ? g_grid_rows : g_grid_cols)) return;
 
-    uintptr_t variables = ld_heap_pointer(c, grid, 0x8f);
+    uintptr_t variables = ld_heap_pointer(c, grid, g_ld_off.gc_variables);
     if (!variables) return;
 
-    int64_t span = ld_heap_i64(item_info, 0x1f);
+    int64_t span = ld_heap_i64(item_info, g_ld_off.item_span_x);
     double current_width = 0, current_height = 0, current_icon = 0;
-    uintptr_t icon_record = ld_heap_pointer(c, grid, 0x6b);
-    if (!icon_record || !ld_read_heap(grid + 0x2b, &current_width, sizeof current_width)
-            || !ld_read_heap(grid + 0x33, &current_height, sizeof current_height)
-            || !ld_read_heap(icon_record + 0x17, &current_icon, sizeof current_icon)) return;
+    uintptr_t icon_record = ld_heap_pointer(c, grid, g_ld_off.gc_icons);
+    if (!icon_record || !ld_read_heap(grid + g_ld_off.gc_cell_w, &current_width, sizeof current_width)
+            || !ld_read_heap(grid + g_ld_off.gc_cell_h, &current_height, sizeof current_height)
+            || !ld_read_heap(icon_record + g_ld_off.ic_icon_size, &current_icon, sizeof current_icon)) return;
     const struct ld_home_baseline *base = ld_home_baseline_find(g_home_baseline,
             sizeof g_home_baseline / sizeof g_home_baseline[0], direction,
             current_width, current_height, current_icon);
@@ -197,18 +197,18 @@ static int ld_home_widget_size(struct ld_dart_context *c, uintptr_t item, double
             || !(item & 1) || item == c->x[22]) return 0;
     uintptr_t controller = ld_get_grid_controller(c);
     uintptr_t rx = controller ? ld_heap_pointer(c, controller, ld_get_grid_rx_offset()) : 0;
-    uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
+    uintptr_t grid = rx ? ld_heap_pointer(c, rx, g_ld_off.rx_value) : 0;
     if (!grid) return 0;
     int direction = ld_grid_direction(c, grid);
     if (direction < 0 || direction > 1) return 0;
-    uintptr_t variables = ld_heap_pointer(c, grid, 0x8f);
+    uintptr_t variables = ld_heap_pointer(c, grid, g_ld_off.gc_variables);
     uint32_t layout = 0;
-    if (!variables || !ld_read_heap(variables + 0x27, &layout, sizeof layout)
+    if (!variables || !ld_read_heap(variables + g_ld_off.gv_layout_mode, &layout, sizeof layout)
             || !ld_is_fullscreen_layout(c, layout)) return 0;
     double cell_width = 0, cell_height = 0;
-    if (!ld_read_heap(grid + 0x2b, &cell_width, sizeof cell_width)
-            || !ld_read_heap(grid + 0x33, &cell_height, sizeof cell_height)) return 0;
-    int64_t span_x = ld_heap_i64(item, 0x1f), span_y = ld_heap_i64(item, 0x27);
+    if (!ld_read_heap(grid + g_ld_off.gc_cell_w, &cell_width, sizeof cell_width)
+            || !ld_read_heap(grid + g_ld_off.gc_cell_h, &cell_height, sizeof cell_height)) return 0;
+    int64_t span_x = ld_heap_i64(item, g_ld_off.item_span_x), span_y = ld_heap_i64(item, g_ld_off.item_span_y);
     if (!ld_home_widget_extent(span_x, cell_width, 1, width)
             || !ld_home_widget_extent(span_y, cell_height, 1, height)) return 0;
     uintptr_t globals = 0, device = 0;
@@ -217,14 +217,14 @@ static int ld_home_widget_size(struct ld_dart_context *c, uintptr_t item, double
     if (!ld_read_heap(c->x[26] + 0x78, &globals, sizeof globals) || !globals
             || !ld_read_heap(globals + dev_off, &device, sizeof device)
             || !(device & 1) || device == c->x[22]
-            || !ld_read_heap(device + 0xe7, &device_flags, 1)
-            || !ld_read_heap(item + 0xfb, &item_flags, 1)
+            || !ld_read_heap(device + g_ld_off.devcfg_is_pad, &device_flags, 1)
+            || !ld_read_heap(item + g_ld_off.item_widget_flags, &item_flags, 1)
             || !(device_flags & item_flags & 0x10)) return 0;
-    uintptr_t icon = ld_heap_pointer(c, grid, 0x6b);
-    uintptr_t title = ld_heap_pointer(c, grid, 0x6f);
+    uintptr_t icon = ld_heap_pointer(c, grid, g_ld_off.gc_icons);
+    uintptr_t title = ld_heap_pointer(c, grid, g_ld_off.gc_title);
     double icon_size = 0, title_height = 0;
-    if (!icon || !title || !ld_read_heap(icon + 0x17, &icon_size, sizeof icon_size)
-            || !ld_read_heap(title + 0x27, &title_height, sizeof title_height)) return 0;
+    if (!icon || !title || !ld_read_heap(icon + g_ld_off.ic_icon_size, &icon_size, sizeof icon_size)
+            || !ld_read_heap(title + g_ld_off.tc_title_h, &title_height, sizeof title_height)) return 0;
     const struct ld_home_baseline *base = ld_home_baseline_find(g_home_baseline,
         sizeof g_home_baseline / sizeof *g_home_baseline, direction, cell_width, cell_height, icon_size);
     if (!base) return 0;

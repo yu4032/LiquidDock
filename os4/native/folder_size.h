@@ -36,8 +36,8 @@ static void ld_align_size_spec(struct ld_dart_context *c, void *original,
 
     double pitch, icon, extent;
     int64_t span = vertical ? span_y : span_x;
-    uintptr_t icon_record = ld_heap_pointer(c, grid, 0x6b);
-    if (!icon_record || !ld_read_heap(icon_record + 0x17, &icon, sizeof icon)
+    uintptr_t icon_record = ld_heap_pointer(c, grid, g_ld_off.gc_icons);
+    if (!icon_record || !ld_read_heap(icon_record + g_ld_off.ic_icon_size, &icon, sizeof icon)
             || !ld_read_heap(fp - (vertical ? 0x30 : 0x38), &pitch, sizeof pitch)) return;
     double ws_ratio = ld_ws_icon_ratio(NULL);
     if (ws_ratio != 1.0) icon *= ws_ratio;
@@ -340,16 +340,16 @@ __attribute__((used)) static void ld_observe_folder_title_visibility(struct ld_d
     uintptr_t controller = ld_heap_pointer(c, context, 0xf);
     size_t model_off = g_icon_model_off ? g_icon_model_off : 0x83u;
     uintptr_t model = controller ? ld_heap_pointer(c, controller, model_off) : 0;
-    if (!model || ld_heap_i64(model, 0x47) != -100) return;
+    if (!model || ld_heap_i64(model, g_ld_off.item_container) != -100) return;
 
-    int64_t sx = ld_heap_i64(model, 0x1f);
-    int64_t sy = ld_heap_i64(model, 0x27);
+    int64_t sx = ld_heap_i64(model, g_ld_off.item_span_x);
+    int64_t sy = ld_heap_i64(model, g_ld_off.item_span_y);
     if (sx < 1 || sx > 10 || sy < 1 || sy > 10 || (sx == 1 && sy == 1)) return;
     int show = __atomic_load_n(&g_show_big_folder_title, __ATOMIC_ACQUIRE);
     if (!show) {
         c->x[3] = dart_false;
     } else if (c->x[2] == dart_false && c->x[3] == dart_false
-            && ld_heap_i64(model, 0xf) == (int64_t)c->x[1]) {
+            && ld_heap_i64(model, g_ld_off.item_type_id) == (int64_t)c->x[1]) {
         // Only the type check reaches the join with false in both registers.
         // Other paths still obey Launcher animation and title visibility.
         c->x[3] = c->x[22] + 0x20;

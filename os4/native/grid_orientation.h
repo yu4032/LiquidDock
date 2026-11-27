@@ -10,7 +10,7 @@ static inline uintptr_t ld_get_grid_rx_offset(void) {
 }
 
 static inline int ld_grid_direction(struct ld_dart_context *c,uintptr_t grid) {
-    uintptr_t variables=ld_heap_pointer(c,grid,0x8f),value=ld_heap_pointer(c,variables,0x23);
+    uintptr_t variables=ld_heap_pointer(c,grid,g_ld_off.gc_variables),value=ld_heap_pointer(c,variables,g_ld_off.gv_orientation);
     int64_t raw=ld_heap_i64(value,7);
     return value && (raw==0 || raw==1)?(int)raw:-1;
 }

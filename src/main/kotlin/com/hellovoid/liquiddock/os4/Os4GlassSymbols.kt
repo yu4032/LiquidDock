@@ -143,6 +143,11 @@ internal object Os4GlassSymbols {
         "_HotseatWidgetPadState._applyDiffWithAnimation",
         "_HotseatWidgetPadState._defaultIconSize",
         "GridController.gridHeight",
+        "GridController.hotSeatsHeight",
+        "_HotseatWidgetPadState.build",
+        "WidgetResizeFrameManager.checkIfCanShowResizeFrame",
+        "ResizeFrameController.canResizeVertically",
+        "ResizeFrameController.canResizeHorizontally",
     )
     private val layoutExtraSymbolNames = listOf(
         "GridController._filterActiveGridConfig",

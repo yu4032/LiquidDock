@@ -94,12 +94,12 @@ static inline void ld_capture_saved_items(const struct ld_layout_item *items, si
 __attribute__((used)) static void ld_save_batch(struct ld_dart_context *c) {
     uintptr_t list = c->x[2];
     unsigned cid = ld_heap_u32(list, (size_t)-1) >> 12 & 0xfffff;
-    if (cid != 0x5c && cid != 0x59 && cid != 0x5a) {
+    if (cid != LD_CID_GROWABLE_LIST && cid != LD_CID_ARRAY && cid != LD_CID_IMMUTABLE_ARRAY) {
         ld_blog("save batch skipped list CID=%x", cid);
         return;
     }
     int n = (int32_t)ld_heap_u32(list, 0xb) / 2;
-    uintptr_t data = cid == 0x5c ? ld_heap_pointer(c, list, 0xf) : list;
+    uintptr_t data = cid == LD_CID_GROWABLE_LIST ? ld_heap_pointer(c, list, 0xf) : list;
     if (!data || n <= 0 || n > LD_LAYOUT_MAX_ITEMS) return;
     struct ld_layout_item *raw = calloc((size_t)n, sizeof *raw);
     int64_t *conts = calloc((size_t)n, sizeof *conts);
@@ -164,7 +164,7 @@ __attribute__((used)) static void ld_save_single(struct ld_dart_context *c) {
 __attribute__((used)) static void ld_delete_item(struct ld_dart_context *c) {
     int64_t id = INT64_MIN;
     if (!(c->x[2] & 1)) id = (int64_t)c->x[2] / 2;
-    else if ((ld_heap_u32(c->x[2], (size_t)-1) >> 12 & 0xfffff) == 0x3d) id = ld_heap_i64(c->x[2], 7);
+    else if ((ld_heap_u32(c->x[2], (size_t)-1) >> 12 & 0xfffff) == LD_CID_MINT) id = ld_heap_i64(c->x[2], 7);
     if (id >= 0) {
         struct ld_layout_item item = {.id = id, .screen = -1};
         int dir_hint = ld_save_dir_hint();

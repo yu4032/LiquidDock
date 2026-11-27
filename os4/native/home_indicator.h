@@ -20,11 +20,11 @@ __attribute__((used)) static void ld_observe_home_indicator(struct ld_dart_conte
     uintptr_t controller = ld_get_grid_controller(c);
     if (!controller) return;
     uintptr_t rx=ld_heap_pointer(c,controller,ld_get_grid_rx_offset());
-    uintptr_t grid=rx?ld_heap_pointer(c,rx,0x13):0;
-    uintptr_t variables=grid?ld_heap_pointer(c,grid,0x8f):0;
+    uintptr_t grid=rx?ld_heap_pointer(c,rx,g_ld_off.rx_value):0;
+    uintptr_t variables=grid?ld_heap_pointer(c,grid,g_ld_off.gc_variables):0;
     uint32_t layout=0;
     if (!rx || !grid || !variables ||
-        !ld_read_heap(variables+0x27,&layout,sizeof layout) ||
+        !ld_read_heap(variables+g_ld_off.gv_layout_mode,&layout,sizeof layout) ||
         !ld_is_fullscreen_layout(c, layout)) return;
     int direction=ld_grid_direction(c,grid);
     if (direction!=0 && direction!=1) return;

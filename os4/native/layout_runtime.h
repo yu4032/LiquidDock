@@ -78,8 +78,8 @@ static void ld_layout_write_items(const uintptr_t *cells, const uintptr_t *model
             memcpy((void *)(cells[i] + 0x13), &y, 8);
         }
         if (!ld_dart_is_ro_addr(models[i])) {
-            memcpy((void *)(models[i] + 0x37), &x, 8);
-            memcpy((void *)(models[i] + 0x3f), &y, 8);
+            memcpy((void *)(models[i] + g_ld_off.item_cell_x), &x, 8);
+            memcpy((void *)(models[i] + g_ld_off.item_cell_y), &y, 8);
         }
     }
 }
@@ -92,8 +92,8 @@ static int ld_layout_write_verified(const uintptr_t *cells, const uintptr_t *mod
     for (size_t i = 0; i < n; i++) {
         if (ld_heap_i64(cells[i], 0xb) != want[i].x ||
             ld_heap_i64(cells[i], 0x13) != want[i].y ||
-            ld_heap_i64(models[i], 0x37) != want[i].x ||
-            ld_heap_i64(models[i], 0x3f) != want[i].y) return 0;
+            ld_heap_i64(models[i], g_ld_off.item_cell_x) != want[i].x ||
+            ld_heap_i64(models[i], g_ld_off.item_cell_y) != want[i].y) return 0;
     }
     return 1;
 }
@@ -181,7 +181,7 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
         uintptr_t screen = ld_heap_pointer(c, data, 0xf + i * 4);
         uintptr_t layout = ld_heap_pointer(c, screen, g_page_fields.layout);
         uintptr_t items = ld_heap_pointer(c, layout, g_page_fields.items);
-        if (!items || (ld_heap_u32(items, (size_t)-1) >> 12 & 0xfffff) != 0x5c) goto done;
+        if (!items || (ld_heap_u32(items, (size_t)-1) >> 12 & 0xfffff) != LD_CID_GROWABLE_LIST) goto done;
         int size=(int32_t)ld_heap_u32(items,0xb)>>1;
         uintptr_t array=ld_heap_pointer(c,items,0xf);
         if(!layout || !array || size<0 || count+(size_t)size>LD_LAYOUT_MAX_ITEMS) goto done;

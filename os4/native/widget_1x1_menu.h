@@ -611,7 +611,7 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
 
     uint32_t cid = ld_dart_cid(widget);
     if (cid == g_w1x1_app_widget_cid) {
-        uintptr_t mgr = ld_heap_pointer(c, ws_ctrl, 0x1d7);
+        uintptr_t mgr = ld_heap_pointer(c, ws_ctrl, g_ld_off.ws_ctrl_resize_mgr);
         if (!mgr || !g_w1x1_rt[LD_W1X1_ADD_RESIZE_FRAME] || !g_w1x1_rt[LD_W1X1_COMMIT_WIDGET_RESIZE]) {
             ld_blog("widget 1x1->2x2: resize manager unavailable");
             return;
@@ -632,10 +632,10 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
 
         g_w1x1_pending.active = 0;
     } else if (!ld_dart_is_ro_addr(widget)) {
-        memcpy((void *)(widget + 0x37), &target_x, sizeof target_x);
-        memcpy((void *)(widget + 0x3f), &target_y, sizeof target_y);
-        memcpy((void *)(widget + 0x1f), &target_sx, sizeof target_sx);
-        memcpy((void *)(widget + 0x27), &target_sy, sizeof target_sy);
+        memcpy((void *)(widget + g_ld_off.item_cell_x), &target_x, sizeof target_x);
+        memcpy((void *)(widget + g_ld_off.item_cell_y), &target_y, sizeof target_y);
+        memcpy((void *)(widget + g_ld_off.item_span_x), &target_sx, sizeof target_sx);
+        memcpy((void *)(widget + g_ld_off.item_span_y), &target_sy, sizeof target_sy);
 
         if (cl && g_w1x1_rt[LD_W1X1_UPDATE_OCCUPIED_MARKS]) {
             uintptr_t items = ld_w1x1_find_cl_items(c, cl, widget);
@@ -695,7 +695,7 @@ __attribute__((used)) static int ld_w1x1_on_resize_needed(struct ld_dart_context
 {
     if (!g_w1x1_pending.active) return 0;
     uintptr_t ctrl = c->x[1];
-    uintptr_t rx = ld_heap_pointer(c, ctrl, 0x23);
+    uintptr_t rx = ld_heap_pointer(c, ctrl, g_ld_off.rfc_widget_rx);
     uintptr_t widget = rx ? ld_heap_pointer(c, rx, 0x7) : 0;
     if (!widget || widget != g_w1x1_pending.widget) return 0;
 
@@ -706,10 +706,10 @@ __attribute__((used)) static int ld_w1x1_on_resize_needed(struct ld_dart_context
     g_w1x1_pending.active = 0;
 
     if (!ld_dart_is_ro_addr(widget)) {
-        memcpy((void *)(widget + 0x37), &cx, sizeof cx);
-        memcpy((void *)(widget + 0x3f), &cy, sizeof cy);
-        memcpy((void *)(widget + 0x1f), &sx, sizeof sx);
-        memcpy((void *)(widget + 0x27), &sy, sizeof sy);
+        memcpy((void *)(widget + g_ld_off.item_cell_x), &cx, sizeof cx);
+        memcpy((void *)(widget + g_ld_off.item_cell_y), &cy, sizeof cy);
+        memcpy((void *)(widget + g_ld_off.item_span_x), &sx, sizeof sx);
+        memcpy((void *)(widget + g_ld_off.item_span_y), &sy, sizeof sy);
     }
 
     uint32_t smi_cx = (uint32_t)(cx << 1);
@@ -717,10 +717,10 @@ __attribute__((used)) static int ld_w1x1_on_resize_needed(struct ld_dart_context
     uint32_t smi_sx = (uint32_t)(sx << 1);
     uint32_t smi_sy = (uint32_t)(sy << 1);
     if (!ld_dart_is_ro_addr(ctrl)) {
-        memcpy((void *)(ctrl + 0x97), &smi_cx, sizeof smi_cx);
-        memcpy((void *)(ctrl + 0x9b), &smi_cy, sizeof smi_cy);
-        memcpy((void *)(ctrl + 0x9f), &smi_sx, sizeof smi_sx);
-        memcpy((void *)(ctrl + 0xa3), &smi_sy, sizeof smi_sy);
+        memcpy((void *)(ctrl + g_ld_off.rfc_cell_x), &smi_cx, sizeof smi_cx);
+        memcpy((void *)(ctrl + g_ld_off.rfc_cell_y), &smi_cy, sizeof smi_cy);
+        memcpy((void *)(ctrl + g_ld_off.rfc_span_x), &smi_sx, sizeof smi_sx);
+        memcpy((void *)(ctrl + g_ld_off.rfc_span_y), &smi_sy, sizeof smi_sy);
     }
 
     c->x[0] = c->x[22];

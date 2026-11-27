@@ -8,8 +8,8 @@ static void *g_orig_filter_return __attribute__((used));
 static int g_load_columns,g_load_rows,g_load_direction;
 static int g_load_prepared;
 __attribute__((used)) static void ld_filter_grid(struct ld_dart_context *c) {
-    g_load_columns=(int)ld_heap_i64(c->x[0],0x1b);
-    g_load_rows=(int)ld_heap_i64(c->x[0],0x23);
+    g_load_columns=(int)ld_heap_i64(c->x[0],g_ld_off.gc_cols);
+    g_load_rows=(int)ld_heap_i64(c->x[0],g_ld_off.gc_rows);
     int raw_dir=ld_grid_direction(c,c->x[0]);
     g_load_direction=(raw_dir==0 || raw_dir==1)?(1-raw_dir):-1;
 }
@@ -42,7 +42,7 @@ static int64_t ld_dto_number(struct ld_dart_context *c,uintptr_t object,size_t o
     uint32_t word=ld_heap_u32(object,offset);
     if(!(word&1)) return (int32_t)word/2;
     uintptr_t ptr=ld_heap_pointer(c,object,offset);
-    if(ptr && (ld_heap_u32(ptr,(size_t)-1)>>12 & 0xfffff)==0x3d) return ld_heap_i64(ptr,7);
+    if(ptr && (ld_heap_u32(ptr,(size_t)-1)>>12 & 0xfffff)==LD_CID_MINT) return ld_heap_i64(ptr,7);
     return INT64_MIN;
 }
 static int ld_read_dto_item_ex(struct ld_dart_context *c,uintptr_t dto,struct ld_layout_item *item,int64_t *out_container) {
@@ -83,7 +83,7 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
     int n=(int32_t)ld_heap_u32(list,0xb)/2;
     uintptr_t data=ld_heap_pointer(c,list,0xf);
     ld_blog("load-items list cid=%x n=%d data=%llx grid=%dx%d",ld_heap_u32(list,(size_t)-1)>>12&0xfffff,n,(unsigned long long)data,g_load_columns,g_load_rows);
-    if(n<0 || n>LD_LAYOUT_MAX_ITEMS || !data || (ld_heap_u32(list,(size_t)-1)>>12&0xfffff)!=0x5c) return;
+    if(n<0 || n>LD_LAYOUT_MAX_ITEMS || !data || (ld_heap_u32(list,(size_t)-1)>>12&0xfffff)!=LD_CID_GROWABLE_LIST) return;
     /* Active GOC geometry wins over filter calls for inactive configurations.
      * During cold boot both orientations may be enumerated after GOC is ready. */
     int cols=g_runtime_columns?g_runtime_columns:g_load_columns;

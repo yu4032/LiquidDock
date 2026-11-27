@@ -73,7 +73,7 @@ static inline int ld_dock_item_is_divider(const struct ld_ws_ctx *c)
     if (!ld_read_heap(item + 7u, &mw, sizeof mw) || !(mw & 1u) || mw < 0x100000u) return 0;
     uintptr_t model = (uintptr_t)mw + (c->x[28] << 32);
     int64_t t = 0;
-    if (!ld_read_heap(model + 0x6bu, &t, sizeof t)) return 0;
+    if (!ld_read_heap(model + g_ld_off.item_kind, &t, sizeof t)) return 0;
     return (t == 0x3eb || t == 0x3ef) ? 1 : 0;
 }
 

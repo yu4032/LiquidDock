@@ -1,6 +1,5 @@
 #include "native_api.h"
 #include "hook_page_pin.h"
-#include "dart_superellipse.h"
 #include "superellipse_blur.h"
 #include "glass_superellipse.h"
 #include "process_gate.h"
@@ -24,6 +23,7 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "LiquidDock4", __VA_ARGS__)
 
 #include "bootlog.h"
+#include "dart_field_offsets.h"
 #include "grid_conf.h"
 #include "layout_fingerprints.h"
 #include "lib_base.h"
@@ -183,6 +183,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "glass_filter_hook.h"
 #include "glass_scope.h"
 static void *g_orig_home_pipeline;
+static size_t g_pipe_vars_fp_off = 0x18u;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
     /* The last field's original load/store is in the relocated instructions.
@@ -190,30 +191,30 @@ __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_contex
      * No allocation or Dart call occurs before the vendor replays that store. */
     uintptr_t variables=0,grid=c->x[1];
     if(!(grid&1) || grid==c->x[22]
-            || !ld_read_heap(c->x[29]-0x18,&variables,8)
+            || !ld_read_heap(c->x[29]-g_pipe_vars_fp_off,&variables,8)
             || !(variables&1) || variables==c->x[22]) return;
     uint32_t compressed=(uint32_t)variables;
-    memcpy((void *)(grid+0x8f),&compressed,4);
+    memcpy((void *)(grid+g_ld_off.gc_variables),&compressed,4);
     struct ld_home_baseline baseline={0};
     int direction=ld_grid_direction(c,grid);
     if(direction==0 || direction==1)
-        ld_home_margins_note(variables,direction,(int)ld_heap_i64(grid,0x1b),(int)ld_heap_i64(grid,0x23));
-    uintptr_t icons=ld_heap_pointer(c,grid,0x6b);
+        ld_home_margins_note(variables,direction,(int)ld_heap_i64(grid,g_ld_off.gc_cols),(int)ld_heap_i64(grid,g_ld_off.gc_rows));
+    uintptr_t icons=ld_heap_pointer(c,grid,g_ld_off.gc_icons);
     uint32_t layout=0;
-    bool is_fs = (ld_read_heap(variables+0x27,&layout,4) && ld_is_fullscreen_layout(c, layout));
+    bool is_fs = (ld_read_heap(variables+g_ld_off.gv_layout_mode,&layout,4) && ld_is_fullscreen_layout(c, layout));
     if(g_count_cols>0 && direction>=0 && direction<=1 && icons
-            && ld_heap_i64(grid,0x1b)==(direction?g_grid_cols:g_grid_rows)
-            && ld_heap_i64(grid,0x23)==(direction?g_grid_rows:g_grid_cols)
+            && ld_heap_i64(grid,g_ld_off.gc_cols)==(direction?g_grid_cols:g_grid_rows)
+            && ld_heap_i64(grid,g_ld_off.gc_rows)==(direction?g_grid_rows:g_grid_cols)
             && (is_fs || 1)
-            && ld_read_heap(grid+0x2b,&baseline.cell_width,8)
-            && ld_read_heap(grid+0x33,&baseline.cell_height,8)
-            && ld_read_heap(icons+0x17,&baseline.icon_size,8)) {
+            && ld_read_heap(grid+g_ld_off.gc_cell_w,&baseline.cell_width,8)
+            && ld_read_heap(grid+g_ld_off.gc_cell_h,&baseline.cell_height,8)
+            && ld_read_heap(icons+g_ld_off.ic_icon_size,&baseline.icon_size,8)) {
         baseline.direction=direction; baseline.valid=1;
     }
     ld_apply_home_icons(c,grid);
-    if(baseline.valid && ld_read_heap(grid+0x2b,&baseline.current_width,8)
-            && ld_read_heap(grid+0x33,&baseline.current_height,8)
-            && ld_read_heap(icons+0x17,&baseline.current_icon,8)) {
+    if(baseline.valid && ld_read_heap(grid+g_ld_off.gc_cell_w,&baseline.current_width,8)
+            && ld_read_heap(grid+g_ld_off.gc_cell_h,&baseline.current_height,8)
+            && ld_read_heap(icons+g_ld_off.ic_icon_size,&baseline.current_icon,8)) {
         for(size_t i=0;i<sizeof g_home_baseline/sizeof *g_home_baseline;i++) {
             if(!g_home_baseline[i].valid || (g_home_baseline[i].direction==direction
                     && !memcmp(&g_home_baseline[i],&baseline,6*sizeof(double)))) {
@@ -860,18 +861,19 @@ static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_l
             }
         }
         if (!fv_bg_fn) fv_bg_fn=ld_find_aot_pattern(lib,0x17f5580u,flutter_view_bg_pat,16);
-        if(fv_bg_fn) {
-            uint32_t w_over = *(const uint32_t *)(fv_bg_fn + 0x14);
-            uint32_t w_def = *(const uint32_t *)(fv_bg_fn + 0x24);
-            if((w_over & 0x3bc00c00u) == 0x38400000u) {
-                int32_t imm9 = (int32_t)((w_over >> 12) & 0x1ffu);
-                if(imm9 & 0x100) imm9 -= 512;
-                if(imm9 >= 0x80 && imm9 <= 0x140) g_rv_props_bg_override_off = (size_t)imm9;
-            }
-            if((w_def & 0x3bc00c00u) == 0x38400000u) {
-                int32_t imm9 = (int32_t)((w_def >> 12) & 0x1ffu);
-                if(imm9 & 0x100) imm9 -= 512;
-                if(imm9 >= 0x80 && imm9 <= 0x140) g_rv_props_bg_default_off = (size_t)imm9;
+        if(fv_bg_fn && executable_range(fv_bg_fn, 0x60u)) {
+            int found_bg = 0;
+            for (size_t off = 0; off < 0x50u; off += 4u) {
+                uint32_t insn = *(const uint32_t *)(fv_bg_fn + off);
+                if ((insn & 0x3bc00c00u) == 0x38400000u) {
+                    int32_t imm9 = (int32_t)((insn >> 12) & 0x1ffu);
+                    if (imm9 & 0x100) imm9 -= 512;
+                    if (imm9 >= 0x80 && imm9 <= 0x140) {
+                        if (found_bg == 0) g_rv_props_bg_override_off = (size_t)imm9;
+                        else { g_rv_props_bg_default_off = (size_t)imm9; break; }
+                        found_bg++;
+                    }
+                }
             }
             int rc=api->hook((void *)fv_bg_fn,(void *)repl_flutter_view_bg,
                     &g_orig_flutter_view_bg);
@@ -1703,9 +1705,11 @@ static void ld_install_dart_site_hook(const struct native_api *api, uintptr_t fn
 {
     if (!fn || !orig || *orig || size < 16) return;
     uintptr_t site = 0;
+    int had_pat = 0;
     if (site_vaddr >= start) {
         uintptr_t orig_delta = site_vaddr - start;
         if (orig_delta + 16 <= size) {
+            had_pat = 1;
             const uint32_t *site_pat = (const uint32_t *)((const char *)words + orig_delta);
             for (size_t off = 0; off < 0x1000 && executable_range(fn + off, 16); off += 4) {
                 if (ld_aot_match_words((const uint32_t *)(fn + off), site_pat, 4)) {
@@ -1715,7 +1719,14 @@ static void ld_install_dart_site_hook(const struct native_api *api, uintptr_t fn
             }
         }
     }
-    if (!site) site = fn + (site_vaddr - start);
+    if (!site) {
+        if (had_pat) {
+            ld_blog("home options observer %lx skipped: site pattern not found in %p",
+                    (unsigned long)site_vaddr, (void *)fn);
+            return;
+        }
+        site = fn + (site_vaddr - start);
+    }
     if (!executable_range(site, 16)) return;
     int status = api->hook((void *)site, replace, orig);
     if (status == 0 && *orig) pin_installed_hook(site);
@@ -1796,8 +1807,14 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         LOGI("libapp.so not mapped yet");
         return;
     }
-    /* Install first: this event source must be available when subsequent
-     * rendering hooks begin observing currentConfig. */
+    /* Install first: decode shared Dart field offsets and install rotation provider. */
+    ld_dart_offsets_decode(&lib, g_home_options.home_opt_targets_present,
+                           g_home_options.home_opt_vaddr, g_home_options.home_opt_size,
+                           g_home_options.layout_extra_targets_present,
+                           g_home_options.layout_extra_vaddr, g_home_options.layout_extra_size);
+    if (g_ld_off.grid_ctrl_global_off && !g_grid_ctrl_offset) {
+        g_grid_ctrl_offset = g_ld_off.grid_ctrl_global_off;
+    }
     ld_rotation_provider_install(api, &lib);
     /* Retry independent rendering/feature modules on every entry regardless of g_installed. */
     ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
@@ -1827,7 +1844,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_folder_layout_sync_install(api,&lib);
     ld_folder_open_fix_install(api,&lib);
     ld_dock_icon_size_install(api,&lib);
-    ld_dart_superellipse_install(api,&lib);
     if (g_installed) { update_layout_ready(); return; }
 
     uintptr_t entry = ld_resolve_sym_or_aot(
@@ -1848,17 +1864,32 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         sizeof ld_home_pipeline_words / sizeof(uint32_t), "home pipeline");
     if (pipe_fn && !g_orig_home_pipeline) {
         uintptr_t pipe_hook = 0;
-        for (size_t off = 0; off < 0x400; off += 4) {
+        for (size_t off = 0; off < 0x400 && executable_range(pipe_fn + off, 12u); off += 4) {
             const uint32_t *p = (const uint32_t *)(pipe_fn + off);
-            if (p[0] == 0xf85e83a0u && p[1] == 0xb808f020u) {
-                pipe_hook = pipe_fn + off;
-                break;
+            /* Match last GridConfig store before return:
+             *   ldur x0, [x29, #-simm9]
+             *   stur w0, [x1, #gc_variables]
+             *   mov  x0, x1  (0xaa0103e0) */
+            if ((p[0] & 0xffe00fffu) == 0xf84003a0u &&
+                (p[1] & 0xffe00fffu) == 0xb8000020u &&
+                p[2] == 0xaa0103e0u) {
+                int32_t fp_s9 = (int32_t)((p[0] >> 12) & 0x1ffu);
+                if (fp_s9 & 0x100) fp_s9 -= 512;
+                int32_t v_s9 = (int32_t)((p[1] >> 12) & 0x1ffu);
+                if (!(v_s9 & 0x100) && fp_s9 < 0 && fp_s9 >= -0x80 &&
+                    v_s9 >= 0x70 && v_s9 <= 0xb0) {
+                    g_pipe_vars_fp_off = (size_t)(-fp_s9);
+                    g_ld_off.gc_variables = (size_t)v_s9;
+                    pipe_hook = pipe_fn + off;
+                    break;
+                }
             }
         }
         if (pipe_hook) {
             int rc = api->hook((void *)pipe_hook, (void *)repl_home_pipeline, &g_orig_home_pipeline);
             if (rc == 0 && g_orig_home_pipeline) pin_installed_hook(pipe_hook);
-            ld_blog("home pipeline observer installed at %p result=%d", (void *)pipe_hook, rc);
+            ld_blog("home pipeline observer installed at %p (fp=-0x%zx vars=0x%zx) result=%d",
+                    (void *)pipe_hook, g_pipe_vars_fp_off, g_ld_off.gc_variables, rc);
         }
     }
 
@@ -1868,19 +1899,42 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         LD_HOME_WIDGET_FUNCTION_OFFSET, ld_home_widget_words,
         sizeof ld_home_widget_words / sizeof(uint32_t), "home widget");
     if (hw_fn && !g_orig_home_widget) {
-        uintptr_t hw_hook = hw_fn + 0x4cu;
-        uintptr_t hw_alloc = hw_fn + 0x1c4u;
-        const uint32_t *hw_w = (const uint32_t *)hw_fn;
-        if ((hw_w[0x54/4] & 0xffc00000u) == 0xf9400000u) {
-            g_dev_config_offset = ((hw_w[0x54/4] >> 10) & 0xfffu) << 3;
-            ld_blog("home widget: dynamically decoded DeviceConfig offset=0x%lx", (unsigned long)g_dev_config_offset);
+        size_t hw_sz = (g_home_options.home_opt_targets_present && g_home_options.home_opt_size[2] >= 0x200u)
+            ? g_home_options.home_opt_size[2] : 0x300u;
+        uintptr_t hw_hook = 0, hw_alloc = 0;
+        const size_t hw_words_n = sizeof ld_home_widget_words / sizeof(uint32_t);
+        if (hw_words_n >= (0x4cu / 4u + 4u) && hw_words_n >= (0x1c4u / 4u + 4u)) {
+            const uint32_t *hook_pat = &ld_home_widget_words[0x4cu / 4u];
+            const uint32_t *alloc_pat = &ld_home_widget_words[0x1c4u / 4u];
+            for (size_t off = 0; off + 16u <= hw_sz && executable_range(hw_fn + off, 16u); off += 4u) {
+                if (!hw_hook && ld_aot_match_words((const uint32_t *)(hw_fn + off), hook_pat, 4u))
+                    hw_hook = hw_fn + off;
+                if (!hw_alloc && ld_aot_match_words((const uint32_t *)(hw_fn + off), alloc_pat, 4u))
+                    hw_alloc = hw_fn + off;
+            }
         }
-        int rc = api->hook((void *)hw_hook, (void *)repl_home_widget, &g_orig_home_widget);
-        if (rc == 0 && g_orig_home_widget) {
-            pin_installed_hook(hw_hook);
-            g_home_widget_allocate = hw_alloc;
+        /* Semantically decode DeviceConfig global offset from ldr x0, [x26, #0x78]; ldr x0, [x0, #uimm]
+         * near hw_hook instead of indexing hw_w[0x54/4]. */
+        if (hw_hook && executable_range(hw_hook, 0x40u)) {
+            const uint32_t *w = (const uint32_t *)hw_hook;
+            for (size_t i = 0; i + 1 < 16u; i++) {
+                if (w[i] == 0xf9403f40u && (w[i + 1] & 0xffc003ffu) == 0xf9400000u) {
+                    g_dev_config_offset = ((w[i + 1] >> 10) & 0xfffu) << 3;
+                    ld_blog("home widget: dynamically decoded DeviceConfig offset=0x%lx", (unsigned long)g_dev_config_offset);
+                    break;
+                }
+            }
         }
-        ld_blog("home widget observer installed at %p (alloc=%p) result=%d", (void *)hw_hook, (void *)hw_alloc, rc);
+        if (hw_hook && hw_alloc) {
+            int rc = api->hook((void *)hw_hook, (void *)repl_home_widget, &g_orig_home_widget);
+            if (rc == 0 && g_orig_home_widget) {
+                pin_installed_hook(hw_hook);
+                g_home_widget_allocate = hw_alloc;
+            }
+            ld_blog("home widget observer installed at %p (alloc=%p) result=%d", (void *)hw_hook, (void *)hw_alloc, rc);
+        } else {
+            ld_blog("home widget observer skipped: site scan miss hook=%p alloc=%p", (void *)hw_hook, (void *)hw_alloc);
+        }
     }
     if (g_home_options.widget_geometry_targets_present && g_home_options.widget_prevent_stretch_enabled) {
         uintptr_t height_fn = 0, content_fn = 0, spec_fn = 0;
@@ -1996,6 +2050,10 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                 home_hooks[i].size / 4, "home_opt margin_bottom");
         } else if (g_home_options.home_opt_targets_present &&
                    (i == 2 || i == 3 || i == 6 || i == 7 || i == 8 || i == 9)) {
+            /* When ws_bg_sync (_DockBackgroundViewState._syncSpringToTarget) is hooked
+             * at prologue, it already handles all DockBgParams producers cleanly; skip
+             * the brittle mid-function repl_dock_background / repl_dock_diff_bg hooks. */
+            if ((i == 7 || i == 8) && g_orig_ws_bg_sync) continue;
             int opt_idx = (i == 2) ? 3 : (i == 3) ? 4 : (i == 6) ? 6 : (i == 7) ? 7 : (i == 8) ? 8 : 9;
             fn = ld_resolve_sym_prologue_or_aot(
                 &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
@@ -2011,7 +2069,23 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                 home_hooks[i].replace, home_hooks[i].orig);
     }
     if(!g_grid_cols || !g_grid_rows) return;
-    void *site = (void *)(entry + 0x80);
+    uintptr_t pad_site = 0;
+    size_t pad_sz = (g_home_options.home_opt_targets_present && g_home_options.home_opt_size[0] >= 0x90u)
+        ? g_home_options.home_opt_size[0] : 0x180u;
+    if (sizeof ld_pad_rowcol_words / sizeof(uint32_t) >= (0x80u / 4u + 4u)) {
+        const uint32_t *pad_pat = &ld_pad_rowcol_words[0x80u / 4u];
+        for (size_t off = 0; off + 16u <= pad_sz && executable_range(entry + off, 16u); off += 4u) {
+            if (ld_aot_match_words((const uint32_t *)(entry + off), pad_pat, 4u)) {
+                pad_site = entry + off;
+                break;
+            }
+        }
+    }
+    if (!pad_site) {
+        ld_blog("PadRowColHandler hook skipped: site pattern not found in %p", (void *)entry);
+        return;
+    }
+    void *site = (void *)pad_site;
     void *backup = NULL;
     int result = api->hook(site, (void *)repl_pad_rowcol_counts, &backup);
     if (result != 0 || !backup) {
@@ -2032,11 +2106,24 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         LD_FILTER_VADDR, ld_filter_words,
         sizeof ld_filter_words / sizeof(uint32_t), "filter_grid");
     if (filter && !g_orig_filter_return) {
-        uintptr_t fsite = filter + 0x2a4u;
-        if (executable_range(fsite, 16)) {
+        uintptr_t fsite = 0;
+        size_t fsz = (g_home_options.layout_extra_targets_present && g_home_options.layout_extra_size[0] >= 0x2c0u)
+            ? g_home_options.layout_extra_size[0] : 0x400u;
+        if (sizeof ld_filter_words / sizeof(uint32_t) >= (0x2a4u / 4u + 4u)) {
+            const uint32_t *fpat = &ld_filter_words[0x2a4u / 4u];
+            for (size_t off = 0; off + 16u <= fsz && executable_range(filter + off, 16u); off += 4u) {
+                if (ld_aot_match_words((const uint32_t *)(filter + off), fpat, 4u)) {
+                    fsite = filter + off;
+                    break;
+                }
+            }
+        }
+        if (fsite && executable_range(fsite, 16)) {
             result = api->hook((void *)fsite, (void *)repl_filter_grid, &g_orig_filter_return);
             if (result == 0 && g_orig_filter_return) pin_installed_hook(fsite);
             ld_blog("read-only grid selection installed at %p result=%d", (void *)fsite, result);
+        } else {
+            ld_blog("read-only grid selection skipped: site pattern not found in %p", (void *)filter);
         }
     }
     struct { uintptr_t vaddr; const void *words; size_t size; void *replace; void **orig; } observers[] = {

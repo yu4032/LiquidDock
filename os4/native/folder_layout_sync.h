@@ -243,7 +243,7 @@ static unsigned ld_fls_shift_preview_items(uintptr_t strat, uintptr_t x28,
             uint32_t lhdr = 0, len_smi = 0, aw = 0;
             if ((!null_low || (uint32_t)list != null_low) &&
                 ld_read_heap(list - 1u, &lhdr, sizeof lhdr) &&
-                ((lhdr >> 12) & 0xfffffu) == 0x5cu &&
+                ((lhdr >> 12) & 0xfffffu) == LD_CID_GROWABLE_LIST &&
                 ld_read_heap(list + 0xbu, &len_smi, sizeof len_smi) &&
                 !(len_smi & 1u) &&
                 ld_read_heap(list + 0xfu, &aw, sizeof aw) &&
@@ -339,7 +339,7 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
     uint32_t lhdr = 0, len_smi = 0, aw = 0;
     if ((null_low && (uint32_t)list == null_low) ||
         !ld_read_heap(list - 1u, &lhdr, sizeof lhdr) ||
-        ((lhdr >> 12) & 0xfffffu) != 0x5cu ||
+        ((lhdr >> 12) & 0xfffffu) != LD_CID_GROWABLE_LIST ||
         !ld_read_heap(list + 0xbu, &len_smi, sizeof len_smi) ||
         (len_smi & 1u) ||
         !ld_read_heap(list + 0xfu, &aw, sizeof aw) ||
@@ -581,7 +581,7 @@ __attribute__((used)) static void ld_fls_post_cal_item_size(struct ld_ws_ctx *c)
     if (c->x[27]) ld_read_heap((uintptr_t)c->x[27] + 64u, &null_obj, sizeof null_obj);
     uint32_t hot_w = 0;
     int in_hotseat = (span_x == 1 && span_y == 1) &&
-                     ld_read_heap(strat + 0x43u, &hot_w, sizeof hot_w) &&
+                     ld_read_heap(strat + g_ld_off.fls_in_hotseat, &hot_w, sizeof hot_w) &&
                      hot_w == (uint32_t)(null_obj + 0x20u);
     if (in_hotseat) return;
     ld_fls_record_cid(cid, span_x, span_y, title_h);
@@ -605,14 +605,14 @@ __attribute__((used)) static void ld_fls_post_cal_item_size(struct ld_ws_ctx *c)
                 }
             }
             double pw = 0.0, ph_box = 0.0;
-            if (ld_read_heap(strat + 0x27u, &pw, sizeof pw) &&
-                ld_read_heap(strat + 0x1fu, &ph_box, sizeof ph_box) &&
+            if (ld_read_heap(strat + g_ld_off.fls_preview_w, &pw, sizeof pw) &&
+                ld_read_heap(strat + g_ld_off.fls_preview_h, &ph_box, sizeof ph_box) &&
                 isfinite(pw) && isfinite(ph_box) &&
                 pw >= 10.0 && pw <= 400.0 && ph_box >= 10.0 && ph_box <= 400.0) {
                 double npw = pw * ws_ratio;
                 double nph_box = ph_box * ws_ratio;
-                memcpy((void *)(strat + 0x27u), &npw, sizeof npw);
-                memcpy((void *)(strat + 0x1fu), &nph_box, sizeof nph_box);
+                memcpy((void *)(strat + g_ld_off.fls_preview_w), &npw, sizeof npw);
+                memcpy((void *)(strat + g_ld_off.fls_preview_h), &nph_box, sizeof nph_box);
             }
         }
     }
@@ -648,7 +648,7 @@ __attribute__((used)) static void ld_fls_post_put_if_absent(struct ld_ws_ctx *c)
     if (!e) return;
     if (e->span_x == 1 && e->span_y == 1) {
         uint32_t hot_w = 0;
-        if (ld_read_heap(strat + 0x43u, &hot_w, sizeof hot_w) &&
+        if (ld_read_heap(strat + g_ld_off.fls_in_hotseat, &hot_w, sizeof hot_w) &&
             hot_w == (uint32_t)(null_obj + 0x20u)) {
             return;
         }

@@ -26,10 +26,6 @@
 
 #define LD_WIDGET_RESIZE_MARKER \
     "/data/user_de/0/com.miui.home/files/liquiddock-widget-resize"
-#define LD_WIDGET_RESIZE_VADDR 0x19dc714u
-/* ResizeFrameController 的可调方向谓词：1×1 时平板路径会拒绝，导致手柄拖不动。 */
-#define LD_WIDGET_CAN_RESIZE_V_VADDR 0x11d0c5cu
-#define LD_WIDGET_CAN_RESIZE_H_VADDR 0x11d0cc4u
 
 /* Returning the Dart TRUE singleton is a leaf: no stack frame, no saved regs. */
 __attribute__((naked, used)) static void ld_widget_can_resize_always(void)
@@ -51,14 +47,11 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
         return;
     }
     uintptr_t fn = 0;
-    static const uintptr_t resizes[] = { 0x1a30504u, 0x19dc714u, 0x1a318acu };
-    for (size_t i = 0; i < sizeof(resizes)/sizeof(resizes[0]); i++) {
+    if (g_home_options.home_opt_targets_present && g_home_options.home_opt_vaddr[13]) {
         uintptr_t cand = 0;
-        if (ld_vaddr_to_runtime(lib, resizes[i], &cand) &&
-            executable_range(cand, 16) &&
-            *(const uint32_t *)cand == 0xa9bf79fdu) {
+        if (ld_vaddr_to_runtime(lib, g_home_options.home_opt_vaddr[13], &cand) &&
+            executable_range(cand, 16) && *(const uint32_t *)cand == 0xa9bf79fdu) {
             fn = cand;
-            break;
         }
     }
     if (!fn) {
@@ -74,8 +67,7 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
             0x1a30504u, resize_pat, 16, "widget resize");
     }
     if (!fn) return;
-    static const uint32_t prologue[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu};
-    if (memcmp((const void *)fn, prologue, sizeof prologue) != 0) {
+    if (*(const uint32_t *)fn != 0xa9bf79fdu) {
         state = 2;
         ld_blog("widget resize: prologue mismatch at %p", (void *)fn);
         return;
@@ -89,39 +81,21 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
         ld_blog("widget resize: hook failed");
     }
 
-    /* Corner handles: force the two axis predicates to TRUE so a 1x1 widget can
-     * grow. Same Dart TRUE singleton, same leaf ABI. */
-    static const uint32_t pro_v[3] = {0xb8423022u, 0x8b1c8042u, 0xf9402370u};
-    static const uintptr_t vert_addrs[] = { 0x1132940u, 0x11d0c5cu, 0x11d0e94u };
-    static const uintptr_t horiz_addrs[] = { 0x11329a8u, 0x11d0cc4u, 0x11d0efcu };
+    /* Corner handles: resolve ResizeFrameController.canResizeVertically/Horizontally
+     * dynamically by symbol from home_opt_targets[14..15]. */
     uintptr_t fv = 0, fh = 0;
-    for (size_t i = 0; i < sizeof(vert_addrs)/sizeof(vert_addrs[0]); i++) {
+    if (g_home_options.home_opt_targets_present && g_home_options.home_opt_vaddr[14]) {
         uintptr_t cand = 0;
-        if (ld_vaddr_to_runtime(lib, vert_addrs[i], &cand) &&
-            memcmp((const void *)cand, pro_v, sizeof pro_v) == 0) {
+        if (ld_vaddr_to_runtime(lib, g_home_options.home_opt_vaddr[14], &cand) &&
+            executable_range(cand, 16)) {
             fv = cand;
-            break;
         }
     }
-    for (size_t i = 0; i < sizeof(horiz_addrs)/sizeof(horiz_addrs[0]); i++) {
+    if (g_home_options.home_opt_targets_present && g_home_options.home_opt_vaddr[15]) {
         uintptr_t cand = 0;
-        if (ld_vaddr_to_runtime(lib, horiz_addrs[i], &cand) &&
-            memcmp((const void *)cand, pro_v, sizeof pro_v) == 0) {
+        if (ld_vaddr_to_runtime(lib, g_home_options.home_opt_vaddr[15], &cand) &&
+            executable_range(cand, 16)) {
             fh = cand;
-            break;
-        }
-    }
-    if (!fv || !fh) {
-        uintptr_t base = 0;
-        if (ld_vaddr_to_runtime(lib, 0x11d0c5cu, &base) && executable_range(base - 0x80000u, 0x100000u)) {
-            for (uintptr_t p = base - 0x80000u; p <= base + 0x80000u; p += 4) {
-                if (memcmp((const void *)p, pro_v, sizeof pro_v) == 0 &&
-                    memcmp((const void *)(p + 0x68u), pro_v, sizeof pro_v) == 0) {
-                    if (!fv) fv = p;
-                    if (!fh) fh = p + 0x68u;
-                    break;
-                }
-            }
         }
     }
     if (fv) {

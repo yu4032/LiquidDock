@@ -177,17 +177,17 @@ __attribute__((used)) static double ld_folder_blur_pre(uintptr_t ctrl, uintptr_t
     uint32_t pct = __atomic_load_n(&g_os4_folder_blur_percent, __ATOMIC_ACQUIRE);
     if ((ctrl & 1u) && (uint32_t)ctrl != (uint32_t)null_obj && ctrl >= 0x100000u) {
         uint32_t rx_w = 0;
-        if (ld_read_heap(ctrl + 0x2fu, &rx_w, sizeof rx_w) &&
+        if (ld_read_heap(ctrl + g_ld_off.folder_blur_in_laptop, &rx_w, sizeof rx_w) &&
             (rx_w & 1u) && rx_w != (uint32_t)null_obj) {
             uintptr_t rx = (uintptr_t)rx_w + (x28 << 32);
             uint32_t val_w = 0;
             if (!ld_dart_is_ro_addr(rx) &&
-                ld_read_heap(rx + 0x13u, &val_w, sizeof val_w) &&
+                ld_read_heap(rx + g_ld_off.rx_value, &val_w, sizeof val_w) &&
                 val_w == (uint32_t)(null_obj + 0x20u)) {
                 /* Force FolderClingBlurWidget to use the normal blur mode (+0x13 = 1)
                  * instead of the darkened laptop-AllApps fallback (+0x13 = 0). */
                 uint32_t dart_false = (uint32_t)(null_obj + 0x30u);
-                memcpy((void *)(rx + 0x13u), &dart_false, sizeof dart_false);
+                memcpy((void *)(rx + g_ld_off.rx_value), &dart_false, sizeof dart_false);
                 static unsigned logs;
                 if (logs++ < 6u) {
                     ld_blog("folder_blur_pre: cleared inLaptopAllApps on ctrl=0x%lx", (unsigned long)ctrl);
