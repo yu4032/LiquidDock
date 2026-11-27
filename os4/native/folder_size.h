@@ -338,7 +338,8 @@ __attribute__((used)) static void ld_observe_folder_title_visibility(struct ld_d
     if (!ld_read_heap(c->x[29] - 8, &context, sizeof context)
             || !(context & 1) || context != c->x[0]) return;
     uintptr_t controller = ld_heap_pointer(c, context, 0xf);
-    uintptr_t model = controller ? ld_heap_pointer(c, controller, 0x83) : 0;
+    size_t model_off = g_icon_model_off ? g_icon_model_off : 0x83u;
+    uintptr_t model = controller ? ld_heap_pointer(c, controller, model_off) : 0;
     if (!model || ld_heap_i64(model, 0x47) != -100) return;
 
     int64_t sx = ld_heap_i64(model, 0x1f);
@@ -379,208 +380,108 @@ static uintptr_t ld_find_words_in_range(uintptr_t start, size_t size,
     return 0;
 }
 
-static void ld_install_folder_preview_inset(const struct native_api *api, const ld_lib_info *lib);
 static void ld_folder_size_install(const struct native_api *api, const ld_lib_info *lib,
                                    const struct ld_grid_conf *conf)
 {
     if (!conf->big_folder_enabled) return;
 
-    ld_install_folder_preview_inset(api, lib);
-
-    if (!conf->big_folder_align_icon || !conf->folder_size_targets_present
-            || g_orig_aligned_width) {
-        if (g_orig_folder_title_visibility) {
-            __atomic_store_n(&g_show_big_folder_title, conf->big_folder_title_enabled,
-                             __ATOMIC_RELEASE);
+    if (conf->big_folder_align_icon && conf->folder_size_targets_present && !g_orig_aligned_width) {
+        uintptr_t functions[2];
+        const size_t minimum_size[] = {0x40, 0x200};
+        int targets_ok = 1;
+        for (size_t i = 0; i < 2; ++i) {
+            if (conf->folder_size_size[i] < minimum_size[i]
+                    || !ld_vaddr_to_runtime(lib, conf->folder_size_vaddr[i], &functions[i])
+                    || !executable_range(functions[i], conf->folder_size_size[i])) {
+                ld_blog("folder_size skip: bad target[%zu] vaddr=%#llx sz=%zu",
+                        i, (unsigned long long)conf->folder_size_vaddr[i], conf->folder_size_size[i]);
+                targets_ok = 0;
+                break;
+            }
         }
-        static int logged_skip;
-        if (!g_orig_aligned_width && !logged_skip) {
-            logged_skip = 1;
-            ld_blog("folder_size skip: align=%d present=%d",
-                    conf->big_folder_align_icon, conf->folder_size_targets_present);
+        if (targets_ok) {
+            uintptr_t spec = functions[1];
+            size_t spec_size = conf->folder_size_size[1];
+            g_folder_measure_start = functions[0];
+            g_folder_measure_end = functions[0] + conf->folder_size_size[0];
+            const uint32_t percent_width_words[] = {0x1e603844, 0xfc5c83a0, 0x1e640802, 0xa9460740};
+            const uint32_t percent_height_words[] = {0x1e603822, 0xfc5d03a1, 0x1e620823, 0xfc1c03a3};
+            const uint32_t spec_words[] = {0x9e620020, 0xfc5c83a1, 0x1e600823, 0x1e623860};
+            uintptr_t site_spec = ld_find_words_in_range(spec, spec_size, spec_words, 4);
+            uintptr_t site_pw = ld_find_words_in_range(spec, spec_size, percent_width_words, 4);
+            uintptr_t site_ph = ld_find_words_in_range(spec, spec_size, percent_height_words, 4);
+            if (!site_spec || !site_pw || !site_ph) {
+                ld_blog("icon aligned folder sizing pattern miss: spec=%#lx pw=%#lx ph=%#lx",
+                        (unsigned long)site_spec, (unsigned long)site_pw, (unsigned long)site_ph);
+            } else if (!ld_install_alignment_site(api, site_spec, spec_words,
+                        repl_aligned_width, &g_orig_aligned_width)
+                    || !ld_install_alignment_site(api, site_pw, percent_width_words,
+                        repl_percent_width, &g_orig_percent_width)
+                    || !ld_install_alignment_site(api, site_ph, percent_height_words,
+                        repl_percent_height, &g_orig_percent_height)) {
+                ld_blog("folder_size skip: hook install failed spec=%p pw=%p ph=%p",
+                        g_orig_aligned_width, g_orig_percent_width, g_orig_percent_height);
+            } else {
+                __atomic_store_n(&g_align_folders, 1, __ATOMIC_RELEASE);
+                ld_blog("icon aligned folder sizing installed");
+            }
         }
-        return;
-    }
-
-    uintptr_t functions[2];
-    const size_t minimum_size[] = {0x40, 0x200};
-    for (size_t i = 0; i < 2; ++i) {
-        if (conf->folder_size_size[i] < minimum_size[i]
-                || !ld_vaddr_to_runtime(lib, conf->folder_size_vaddr[i], &functions[i])
-                || !executable_range(functions[i], conf->folder_size_size[i])) {
-            ld_blog("folder_size skip: bad target[%zu] vaddr=%#llx sz=%zu",
-                    i, (unsigned long long)conf->folder_size_vaddr[i], conf->folder_size_size[i]);
-            return;
-        }
-    }
-    uintptr_t spec = functions[1];
-    size_t spec_size = conf->folder_size_size[1];
-    g_folder_measure_start = functions[0];
-    g_folder_measure_end = functions[0] + conf->folder_size_size[0];
-    const uint32_t percent_width_words[] = {0x1e603844, 0xfc5c83a0, 0x1e640802, 0xa9460740};
-    const uint32_t percent_height_words[] = {0x1e603822, 0xfc5d03a1, 0x1e620823, 0xfc1c03a3};
-    const uint32_t spec_words[] = {0x9e620020, 0xfc5c83a1, 0x1e600823, 0x1e623860};
-    uintptr_t site_spec = ld_find_words_in_range(spec, spec_size, spec_words, 4);
-    uintptr_t site_pw = ld_find_words_in_range(spec, spec_size, percent_width_words, 4);
-    uintptr_t site_ph = ld_find_words_in_range(spec, spec_size, percent_height_words, 4);
-    if (!site_spec || !site_pw || !site_ph) {
-        ld_blog("icon aligned folder sizing pattern miss: spec=%#lx pw=%#lx ph=%#lx",
-                (unsigned long)site_spec, (unsigned long)site_pw, (unsigned long)site_ph);
-        return;
-    }
-    if (!ld_install_alignment_site(api, site_spec, spec_words,
-                repl_aligned_width, &g_orig_aligned_width)
-            || !ld_install_alignment_site(api, site_pw, percent_width_words,
-                repl_percent_width, &g_orig_percent_width)
-            || !ld_install_alignment_site(api, site_ph, percent_height_words,
-                repl_percent_height, &g_orig_percent_height)) {
-        ld_blog("folder_size skip: hook install failed spec=%p pw=%p ph=%p",
-                g_orig_aligned_width, g_orig_percent_width, g_orig_percent_height);
-        return;
     }
 
-    __atomic_store_n(&g_align_folders, 1, __ATOMIC_RELEASE);
-    ld_blog("icon aligned folder sizing installed");
-    if (conf->folder_size_vaddr[2]) {
+    if (conf->folder_size_targets_present && conf->folder_size_vaddr[2]) {
         __atomic_store_n(&g_show_big_folder_title, conf->big_folder_title_enabled, __ATOMIC_RELEASE);
-        uintptr_t builder = 0;
-        const uint32_t visibility_words[] = {0xf85e03a1, 0xf85e83a2, 0xf81d83a3, 0xb841f044};
-        if (ld_vaddr_to_runtime(lib, conf->folder_size_vaddr[2], &builder)) {
-            size_t scan_sz = conf->folder_size_size[2] + 0xa00;
-            uintptr_t vis_site = ld_find_words_in_range(builder, scan_sz, visibility_words, 4);
-            if (vis_site && ld_install_alignment_site(api, vis_site, visibility_words,
-                    repl_folder_title_visibility, &g_orig_folder_title_visibility)) {
-                ld_blog("big folder title visibility installed: show=%d", conf->big_folder_title_enabled);
-                if (conf->folder_title_anim_present && !g_orig_folder_open_title) {
-                    uintptr_t fns[5] = {0};
-                    int ok = 1;
-                    for (size_t i = 0; i < 5; i++) {
-                        if (conf->folder_title_anim_size[i] < 0x20u
-                                || !ld_vaddr_to_runtime(lib, conf->folder_title_anim_vaddr[i], &fns[i])
-                                || !executable_range(fns[i], conf->folder_title_anim_size[i])) {
-                            ok = 0;
-                            break;
+        if (!g_orig_folder_title_visibility) {
+            uintptr_t builder = 0;
+            const uint32_t visibility_words[] = {0xf85e03a1, 0xf85e83a2, 0xf81d83a3, 0xb841f044};
+            if (ld_vaddr_to_runtime(lib, conf->folder_size_vaddr[2], &builder)) {
+                size_t scan_sz = conf->folder_size_size[2] + 0xa00;
+                uintptr_t vis_site = ld_find_words_in_range(builder, scan_sz, visibility_words, 4);
+                if (vis_site && ld_install_alignment_site(api, vis_site, visibility_words,
+                        repl_folder_title_visibility, &g_orig_folder_title_visibility)) {
+                    ld_blog("big folder title visibility installed: show=%d", conf->big_folder_title_enabled);
+                    if (conf->folder_title_anim_present && !g_orig_folder_open_title) {
+                        uintptr_t fns[5] = {0};
+                        int ok = 1;
+                        for (size_t i = 0; i < 5; i++) {
+                            if (conf->folder_title_anim_size[i] < 0x20u
+                                    || !ld_vaddr_to_runtime(lib, conf->folder_title_anim_vaddr[i], &fns[i])
+                                    || !executable_range(fns[i], conf->folder_title_anim_size[i])) {
+                                ok = 0;
+                                break;
+                            }
                         }
-                    }
-                    if (ok && ld_ft_decode_icon_ctrl_off((const uint32_t *)fns[2],
-                                conf->folder_title_anim_size[2] / 4u, fns[4], &g_cling_icon_ctrl_off)
-                            && ld_ft_decode_arg_desc_pp_off((const uint32_t *)fns[2],
-                                conf->folder_title_anim_size[2] / 4u, fns[3], &g_set_hide_arg_pp_off)
-                            && ld_ft_decode_set_hide_fields(fns[3], conf->folder_title_anim_size[3],
-                                &g_icon_hide_rx_off, &g_icon_opacity_off, &g_sentinel_pp_off)
-                            && ld_ft_decode_model_off(vis_site, &g_icon_model_off)
-                            && ld_hook_site_safe(fns[0], "folder open title")
-                            && ld_hook_site_safe(fns[1], "folder close title")) {
-                        g_fn_set_is_hide_title = fns[3];
-                        if (api->hook((void *)fns[0], repl_folder_open_title, &g_orig_folder_open_title) == 0
-                                && ld_pin_code_pages_soft(fns[0], 16)
-                                && api->hook((void *)fns[1], repl_folder_start_anim_title,
-                                             &g_orig_folder_start_anim_title) == 0
-                                && ld_pin_code_pages_soft(fns[1], 16)) {
-                            ld_blog("big folder title open/close sync installed: cling_off=%#zx "
-                                    "model=%#zx rx=%#zx op=%#zx arg_pp=%#zx sent_pp=%#zx",
-                                    g_cling_icon_ctrl_off, g_icon_model_off, g_icon_hide_rx_off,
-                                    g_icon_opacity_off, g_set_hide_arg_pp_off, g_sentinel_pp_off);
+                        if (ok && ld_ft_decode_icon_ctrl_off((const uint32_t *)fns[2],
+                                    conf->folder_title_anim_size[2] / 4u, fns[4], &g_cling_icon_ctrl_off)
+                                && ld_ft_decode_arg_desc_pp_off((const uint32_t *)fns[2],
+                                    conf->folder_title_anim_size[2] / 4u, fns[3], &g_set_hide_arg_pp_off)
+                                && ld_ft_decode_set_hide_fields(fns[3], conf->folder_title_anim_size[3],
+                                    &g_icon_hide_rx_off, &g_icon_opacity_off, &g_sentinel_pp_off)
+                                && ld_ft_decode_model_off(vis_site, &g_icon_model_off)
+                                && ld_hook_site_safe(fns[0], "folder open title")
+                                && ld_hook_site_safe(fns[1], "folder close title")) {
+                            g_fn_set_is_hide_title = fns[3];
+                            if (api->hook((void *)fns[0], repl_folder_open_title, &g_orig_folder_open_title) == 0
+                                    && ld_pin_code_pages_soft(fns[0], 16)
+                                    && api->hook((void *)fns[1], repl_folder_start_anim_title,
+                                                 &g_orig_folder_start_anim_title) == 0
+                                    && ld_pin_code_pages_soft(fns[1], 16)) {
+                                ld_blog("big folder title open/close sync installed: cling_off=%#zx "
+                                        "model=%#zx rx=%#zx op=%#zx arg_pp=%#zx sent_pp=%#zx",
+                                        g_cling_icon_ctrl_off, g_icon_model_off, g_icon_hide_rx_off,
+                                        g_icon_opacity_off, g_set_hide_arg_pp_off, g_sentinel_pp_off);
+                            } else {
+                                ld_blog("big folder title open/close hook failed");
+                            }
                         } else {
-                            ld_blog("big folder title open/close hook failed");
+                            ld_blog("big folder title open/close decode miss ok=%d cling=%#zx arg=%#zx "
+                                    "rx=%#zx op=%#zx model=%#zx",
+                                    ok, g_cling_icon_ctrl_off, g_set_hide_arg_pp_off,
+                                    g_icon_hide_rx_off, g_icon_opacity_off, g_icon_model_off);
                         }
-                    } else {
-                        ld_blog("big folder title open/close decode miss ok=%d cling=%#zx arg=%#zx "
-                                "rx=%#zx op=%#zx model=%#zx",
-                                ok, g_cling_icon_ctrl_off, g_set_hide_arg_pp_off,
-                                g_icon_hide_rx_off, g_icon_opacity_off, g_icon_model_off);
                     }
                 }
             }
         }
-    }
-}
-
-
-static void *g_orig_preview_inset;
-static uintptr_t g_preview_inset_resume;
-static volatile int g_fls_ten_icon_inset_active __attribute__((used));
-
-__attribute__((used)) static void ld_observe_folder_preview_inset(struct ld_dart_context *c)
-{
-    c->reserved = (uintptr_t)g_orig_preview_inset;
-    /* When folder_layout_sync directly updates FolderLayout4x2Grid10.previewItemInfos,
-     * both preview rendering and open/close/return animations read the adjusted rects
-     * directly; skip the render-only fallback to avoid double-applying the inset. */
-    if (__atomic_load_n(&g_fls_ten_icon_inset_active, __ATOMIC_ACQUIRE)) return;
-    double inset = (double)__atomic_load_n(&g_home_options.folder_preview_inset, __ATOMIC_ACQUIRE);
-    if (inset == 0.0) return;
-
-    // At this point the preview builder has the controller, strategy and
-    // original icon rectangle in registers. The strategy may be shared.
-    uintptr_t controller = c->x[24], strategy = c->x[25], icon = c->x[20];
-    uintptr_t model = ld_heap_pointer(c, controller, 0x83);
-    if (!model || ld_heap_i64(model, 0x47) != -100) return;
-    if (ld_heap_i64(model, 0xf) != 53
-            || ld_heap_i64(model, 0x1f) != 4
-            || ld_heap_i64(model, 0x27) != 2) return;
-    if (!(strategy & 1) || !(icon & 1)) return;
-
-    uintptr_t fp = c->x[29];
-    double frame_width, frame_height;
-    struct ld_folder_preview_rect original, adjusted;
-    memcpy(&original.y, c->q[2], sizeof original.y);
-    if (!ld_read_heap(fp - 0x78, &original.x, sizeof original.x)
-            || !ld_read_heap(icon + 7, &original.width, sizeof original.width)
-            || !ld_read_heap(icon + 0xf, &original.height, sizeof original.height)
-            || !ld_read_heap(strategy + 0xf, &frame_width, sizeof frame_width)
-            || !ld_read_heap(strategy + 0x17, &frame_height, sizeof frame_height)
-            || frame_width <= frame_height * 1.5) return;
-
-    static double cached_pad0 = 0.0, cached_big_w = 0.0;
-    static double cached_fw = 0.0, cached_fh = 0.0;
-    if (original.x < frame_width * 0.25 && original.y < frame_height * 0.4 && original.width > 35.0) {
-        cached_pad0 = fmin(original.x, original.y);
-        cached_big_w = original.width;
-        cached_fw = frame_width;
-        cached_fh = frame_height;
-    }
-    int cache_matches = cached_pad0 > 1.0 && cached_big_w > 1.0
-            && fabs(frame_width - cached_fw) < 1.0 && fabs(frame_height - cached_fh) < 1.0;
-    double pad0 = cache_matches ? cached_pad0 : fmin(frame_width, frame_height) * 0.1338;
-    double big_w = cache_matches ? cached_big_w : original.width;
-    if (!ld_inset_folder_preview(frame_width, frame_height, pad0, big_w, inset, &original, &adjusted)) return;
-
-    // Write only this build's transient frame. Leave shared preview data intact.
-    double locals[] = {adjusted.y, adjusted.width, adjusted.x, adjusted.height};
-    struct iovec src = {locals, sizeof locals}, dest = {(void *)(fp - 0x88), sizeof locals};
-    if (syscall(SYS_process_vm_writev, getpid(), &src, 1, &dest, 1, 0) != (ssize_t)sizeof locals)
-        return;
-    memcpy(c->q[0], &adjusted.width, sizeof adjusted.width);
-    memcpy(c->q[1], &adjusted.height, sizeof adjusted.height);
-    memcpy(c->q[2], &adjusted.y, sizeof adjusted.y);
-    c->reserved = g_preview_inset_resume;
-}
-
-LD_DART_ROUTED_OBSERVER(repl_folder_preview_inset, ld_observe_folder_preview_inset)
-
-static void ld_install_folder_preview_inset(const struct native_api *api, const ld_lib_info *lib)
-{
-    static int attempted;
-    if (g_orig_preview_inset || attempted) return;
-    attempted = 1;
-    const uint32_t render_words[] = {0xfc1783a2, 0xfc407280, 0xfc1803a0, 0xfc40f281};
-    uintptr_t site = 0;
-    if (g_home_options.folder_pad_targets_present && g_home_options.folder_pad_vaddr[8]) {
-        uintptr_t fn = 0;
-        size_t sz = g_home_options.folder_pad_size[8];
-        if (sz >= 16u && ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.folder_pad_vaddr[8], &fn)) {
-            site = ld_find_words_in_range(fn, sz, render_words, 4);
-        }
-    }
-    if (!site && !g_aot_strict_no_short_fallback) {
-        site = ld_find_aot_pattern(lib, 0x14868e8, render_words, 4);
-    }
-    if (!site) return;
-    g_preview_inset_resume = site + 16;
-    if (ld_install_alignment_site(api, site, render_words,
-                repl_folder_preview_inset, &g_orig_preview_inset)) {
-        ld_blog("ten-icon folder preview inset observer installed at %#lx", (unsigned long)site);
     }
 }
 #endif

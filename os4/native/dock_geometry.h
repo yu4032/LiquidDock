@@ -129,6 +129,7 @@ __attribute__((used)) static void ld_observe_dock_function_size(struct ld_dart_c
 static void *g_orig_dock_bottom __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_bottom(struct ld_dart_context *c)
 {
+    if (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED) && g_home_options.ws.dock_custom) return;
     if(g_home_options.dock.bottom==0 || !ld_dock_active(c)) return;
     /* GridController.hotSeatsMarginBottom: d1 is the original absolute inset,
      * d0 is the vendor extra. The replayed fadd consumes both values. Keep

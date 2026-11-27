@@ -1,6 +1,5 @@
 #include "native_api.h"
 #include "hook_page_pin.h"
-#include "superellipse.h"
 #include "dart_superellipse.h"
 #include "superellipse_blur.h"
 #include "glass_superellipse.h"
@@ -704,7 +703,6 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                     patched, g_home_options.folder_pad_target_count, (unsigned)pad_imm);
         }
     }
-    ld_w1x1_menu_install(api, lib);
     if (g_home_options.use_drag_material || g_home_options.prismal.disable_stationary_downsample) {
         static bool g_blur_degrade_hook_installed = false;
         if (!g_blur_degrade_hook_installed) {
@@ -1812,6 +1810,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_install_os4_widget_hooks(api,&lib);
     ld_install_os4_recents_blur(api,&lib);
     ld_widget_resize_install(api,&lib);
+    ld_w1x1_menu_install(api,&lib);
     ld_ws_resolve_page_fields(&lib);
     ld_workstation_install(api,&lib);
     int any_glass = g_home_options.glass_enabled || g_home_options.soft_glass_enabled;
@@ -1988,6 +1987,9 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
                 home_hooks[i].size / 4, "home_opt glass_v7");
         } else if (i == 4 && g_home_options.home_opt_targets_present) {
+            /* When ws_margin_bottom is installed at prologue, it handles both
+             * Workstation and Normal-mode dock.bottom; skip the duplicate mid-hook. */
+            if (g_orig_ws_margin_bottom) continue;
             fn = ld_resolve_sym_scan_or_aot(
                 &lib, 1, g_home_options.home_opt_vaddr[5], g_home_options.home_opt_size[5], 0x100u,
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
@@ -2331,7 +2333,11 @@ static void install_grid_hook(const struct native_api *api) {
     if (((g_grid_cols > 0 && g_grid_rows > 0) || g_home_options.icon_size_enabled
             || g_home_options.big_folder_enabled || g_home_options.widget_1x1_to_2x2_enabled
             || g_home_options.folder_grid_cols > 0 || g_home_options.folder_grid_rows > 0
-            || g_home_options.dock.enabled || g_home_options.glass_enabled || g_home_options.soft_glass_enabled
+            || g_home_options.dock.enabled || g_home_options.ws.dock_custom
+            || g_home_options.dock_icon_size_percent != 100
+            || g_home_options.ws_dock_icon_size_percent != 100
+            || g_home_options.glass_enabled || g_home_options.soft_glass_enabled
+            || g_home_options.prismal.continuous_corners
             || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100
             || g_home_options.allapps_blur_percent != 100
             || g_home_options.ws_allapps_blur_percent != 100
@@ -2355,6 +2361,7 @@ static void on_library_loaded(const char *name, void *handle)
         const char *base=strrchr(name,'/'); base=base?base+1:name;
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
         else if(!strcmp(base,"libhyper_os_flutter.so")) {
+            pthread_mutex_lock(&g_install_lock);
             int se_on = (g_home_options.glass_enabled || g_home_options.soft_glass_enabled) && g_home_options.prismal.continuous_corners;
             ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled,
                                         &g_home_options.prismal);
@@ -2364,6 +2371,7 @@ static void on_library_loaded(const char *name, void *handle)
                                           (float)g_home_options.large_folder_2x1_corner,
                                           (float)g_home_options.prismal.widget_corner);
             ld_glass_filter_hook_install(g_api);
+            pthread_mutex_unlock(&g_install_lock);
         }
         else if(!strcmp(base,"librust_maml_sdk.so")) {
             pthread_mutex_lock(&g_install_lock);
@@ -2463,9 +2471,10 @@ on_library_loaded_t native_init(struct native_api *api)
     ld_madvise_guard_install(g_api);
     load_grid_config();
     ld_prepare_native_glass();
+    pthread_mutex_lock(&g_install_lock);
     ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled,
                                 &g_home_options.prismal);
+    pthread_mutex_unlock(&g_install_lock);
     install_grid_hook(g_api);
-    ld_superellipse_install(g_api);
     return on_library_loaded;
 }

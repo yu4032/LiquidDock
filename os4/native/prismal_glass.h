@@ -567,72 +567,37 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     float eff_gy = fmaxf(gy - 2.0f * pad_px, 2.0f);
     float min_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fminf(eff_gx, eff_gy) : 100.0f;
     float max_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fmaxf(eff_gx, eff_gy) : 100.0f;
-    int is_dock = 0;
-    int is_widget_tls = 0;
-    int is_large_folder_tls = 0;
+    enum ld_glass_kind kind = LD_GLASS_KIND_NONE;
 #ifdef LD_GLASS_SUPERELLIPSE_H
-    is_dock = g_ld_gse_tls_is_dock;
-    is_widget_tls = g_ld_gse_tls_is_widget;
-    is_large_folder_tls = g_ld_gse_tls_is_large_folder;
-#endif
-    /* Preserve stock full-circle widgets (e.g. 2x2 circular clock widget) and Dock,
-     * while allowing elongated 2x1/1x2 large folders (aspect > 1.35). */
-    int is_circular = (max_glass_dim <= min_glass_dim * 1.35f) &&
-                      (gz >= min_glass_dim * 0.45f);
-    if (!is_circular && !is_dock) {
-    if (is_large_folder_tls) {
-        double clf = (min_glass_dim < 120.0f * d && opt->large_folder_2x1_corner > 0.0)
-            ? opt->large_folder_2x1_corner : opt->large_folder_corner;
-        if (clf > 0.0) {
-            float cr_px = fminf((float)clf * d, min_glass_dim * 0.5f);
-            ld_write_f32(ubo, 0x18u, cr_px);
-        }
-    } else if (is_widget_tls) {
-        if (opt->widget_corner > 0.0) {
-            float cr_px = fminf((float)opt->widget_corner * d, min_glass_dim * 0.5f);
-            ld_write_f32(ubo, 0x18u, cr_px);
-        }
-    } else if (min_glass_dim >= 360.0f && max_glass_dim <= 2000.0f && (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f) {
-        int is_2x2_folder_size = ld_gse_matches_recorded_large_folder(eff_gx / d, eff_gy / d) ||
-                                 (fabsf(eff_gx - eff_gy) < 12.0f && fabsf(eff_gx - 169.7f * d) < 22.0f * d);
-        int is_pre_overridden_widget = (opt->widget_corner > 0.0 && !is_2x2_folder_size &&
-                                        fabsf(gz - (float)opt->widget_corner * d) < 1.5f * d);
-        int is_large_folder = !is_pre_overridden_widget &&
-                              ((gz > 15.2f * d) || is_2x2_folder_size);
-        if (is_large_folder) {
-            if (opt->large_folder_corner > 0.0) {
-                float cr_px = fminf((float)opt->large_folder_corner * d, min_glass_dim * 0.5f);
-                ld_write_f32(ubo, 0x18u, cr_px);
-            }
-        } else if (opt->widget_corner > 0.0) {
-            float cr_px = fminf((float)opt->widget_corner * d, min_glass_dim * 0.5f);
-            ld_write_f32(ubo, 0x18u, cr_px);
-        }
-    } else if (min_glass_dim >= 68.0f * d && max_glass_dim >= 115.0f * d && max_glass_dim <= 2000.0f &&
-               (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f &&
-               gz <= 15.2f * d) {
-        /* 2x1 widgets and scaled-down 2x2 widgets during animations (scale < 1.0). */
-        if (opt->widget_corner > 0.0) {
-            float cr_px = fminf((float)opt->widget_corner * d, min_glass_dim * 0.5f);
-            ld_write_f32(ubo, 0x18u, cr_px);
-        }
-    } else if (min_glass_dim >= 45.0f * d && min_glass_dim < 120.0f * d &&
-               max_glass_dim >= 120.0f * d && max_glass_dim <= 360.0f * d &&
-               (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 4.0f &&
-               gz > 15.2f * d) {
-        /* 2x1 / 1x2 / 3x1 窄条大文件夹（排除 Dock 条） */
-        double c21 = opt->large_folder_2x1_corner > 0.0
-            ? opt->large_folder_2x1_corner : opt->large_folder_corner;
-        if (c21 > 0.0) {
-            float cr_px = fminf((float)c21 * d, min_glass_dim * 0.5f);
-            ld_write_f32(ubo, 0x18u, cr_px);
-        }
-    } else if (min_glass_dim >= 80.0f && max_glass_dim <= 340.0f && fabsf(eff_gx - eff_gy) < 12.0f) {
-        if (opt->small_folder_corner > 0.0) {
-            float cr_px = fminf((float)opt->small_folder_corner * d, min_glass_dim * 0.5f);
-            ld_write_f32(ubo, 0x18u, cr_px);
-        }
+    kind = g_ld_gse_tls_kind;
+    if (kind == LD_GLASS_KIND_NONE) {
+        kind = ld_gse_classify_rect(eff_gx / d, eff_gy / d, gz / d, gz / d, 0,
+                                    (float)opt->widget_corner);
     }
+#endif
+    double target_corner_dp = 0.0;
+    switch (kind) {
+    case LD_GLASS_KIND_LARGE_FOLDER_2X1:
+        target_corner_dp = opt->large_folder_2x1_corner > 0.0
+            ? opt->large_folder_2x1_corner : opt->large_folder_corner;
+        break;
+    case LD_GLASS_KIND_LARGE_FOLDER:
+        target_corner_dp = opt->large_folder_corner;
+        break;
+    case LD_GLASS_KIND_WIDGET:
+        target_corner_dp = opt->widget_corner;
+        break;
+    case LD_GLASS_KIND_SMALL_ICON:
+        if (min_glass_dim >= 80.0f && max_glass_dim <= 340.0f && fabsf(eff_gx - eff_gy) < 12.0f) {
+            target_corner_dp = opt->small_folder_corner;
+        }
+        break;
+    default:
+        break;
+    }
+    if (target_corner_dp > 0.0) {
+        float cr_px = fminf((float)target_corner_dp * d, min_glass_dim * 0.5f);
+        ld_write_f32(ubo, 0x18u, cr_px);
     }
     (void)gz;
 

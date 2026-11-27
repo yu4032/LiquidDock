@@ -26,29 +26,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define LD_FOF_SHADOW_MAX 16u
-
 _Static_assert(sizeof(struct ld_dart_context) == 0x310u,
                "ld_dart_context layout mismatch");
-
-struct ld_fof_frame {
-    uint64_t ret_lr;
-    uint64_t dart_sp;
-    uint64_t arg_x1;
-    uint64_t arg_x2;
-    uint32_t tag;
-};
-
-static __thread struct ld_fof_frame g_fof_shadow[LD_FOF_SHADOW_MAX] __attribute__((used));
-static __thread uint32_t g_fof_shadow_depth __attribute__((used));
-
-enum ld_fof_tag {
-    LD_FOF_TAG_CELL_W = 1u,
-    LD_FOF_TAG_CELL_H = 2u,
-    LD_FOF_TAG_CALIBRATE_H = 3u,
-    LD_FOF_TAG_CALC_POS_X = 4u,
-    LD_FOF_TAG_REFRESH_CACHED = 5u,
-};
 
 struct ld_fof_state {
     int ready;
@@ -699,83 +678,42 @@ static inline void ld_fof_log_geom_once(const char *tag, const struct ld_fof_geo
 
 /* ---- Hook callbacks ---- */
 
-static uint32_t ld_fof_pre_common(struct ld_dart_context *ctx, uint32_t tag, bool sync_cols) {
-    while (g_fof_shadow_depth > 0 &&
-           g_fof_shadow[g_fof_shadow_depth - 1u].dart_sp < ctx->x[15]) {
-        g_fof_shadow_depth--;
-    }
-    if (sync_cols) (void)ld_fof_read_or_sync_cols(ctx, true);
-    if (g_fof_shadow_depth >= LD_FOF_SHADOW_MAX) {
-        ctx->reserved = 0;
-        return 0;
-    }
-    struct ld_fof_frame *f = &g_fof_shadow[g_fof_shadow_depth++];
-    f->ret_lr = ctx->x[30];
-    f->dart_sp = ctx->x[15];
-    f->arg_x1 = ctx->x[1];
-    f->arg_x2 = ctx->x[2];
-    f->tag = tag;
-    ctx->reserved = 1;
-    return 1;
+static inline void ld_fof_ws_to_dart(const struct ld_ws_ctx *w, struct ld_dart_context *d) {
+    memset(d, 0, sizeof(*d));
+    memcpy(d->x, w->x, sizeof(d->x));
 }
 
-static bool ld_fof_pop_frame(uint32_t expected_tag, struct ld_fof_frame *out) {
-    if (g_fof_shadow_depth == 0) return false;
-    if (g_fof_shadow[g_fof_shadow_depth - 1u].tag == expected_tag) {
-        *out = g_fof_shadow[--g_fof_shadow_depth];
-        return true;
-    }
-    for (uint32_t i = g_fof_shadow_depth; i > 0; i--) {
-        if (g_fof_shadow[i - 1u].tag == expected_tag) {
-            *out = g_fof_shadow[i - 1u];
-            g_fof_shadow_depth = i - 1u;
-            return true;
-        }
-    }
-    return false;
-}
-
-__attribute__((used)) static void ld_fof_pre_cell_w(struct ld_dart_context *ctx) {
-    (void)ld_fof_pre_common(ctx, LD_FOF_TAG_CELL_W, false);
-}
-__attribute__((used)) static void ld_fof_post_cell_w(struct ld_dart_context *ctx) {
-    struct ld_fof_frame f;
-    if (!ld_fof_pop_frame(LD_FOF_TAG_CELL_W, &f)) return;
-    ctx->x[30] = f.ret_lr;
-    double raw_w = ld_fof_read_q_double(&ctx->q[0][0]);
+__attribute__((used)) static void ld_fof_post_cell_w(struct ld_ws_ctx *w) {
+    struct ld_dart_context ctx;
+    ld_fof_ws_to_dart(w, &ctx);
+    double raw_w = 0.0;
+    memcpy(&raw_w, &w->ret_d0, sizeof(raw_w));
     struct ld_fof_geom g;
-    if (ld_fof_compute_geom(ctx, (uintptr_t)f.arg_x1, -1.0, raw_w, raw_w, &g) && g.scaled) {
-        ld_fof_write_q_double(&ctx->q[0][0], g.eff_cell_w);
+    if (ld_fof_compute_geom(&ctx, (uintptr_t)w->x[1], -1.0, raw_w, raw_w, &g) && g.scaled) {
+        memcpy(&w->ret_d0, &g.eff_cell_w, sizeof(g.eff_cell_w));
     }
 }
 
-__attribute__((used)) static void ld_fof_pre_cell_h(struct ld_dart_context *ctx) {
-    (void)ld_fof_pre_common(ctx, LD_FOF_TAG_CELL_H, false);
-}
-__attribute__((used)) static void ld_fof_post_cell_h(struct ld_dart_context *ctx) {
-    struct ld_fof_frame f;
-    if (!ld_fof_pop_frame(LD_FOF_TAG_CELL_H, &f)) return;
-    ctx->x[30] = f.ret_lr;
-    double raw_h = ld_fof_read_q_double(&ctx->q[0][0]);
+__attribute__((used)) static void ld_fof_post_cell_h(struct ld_ws_ctx *w) {
+    struct ld_dart_context ctx;
+    ld_fof_ws_to_dart(w, &ctx);
+    double raw_h = 0.0;
+    memcpy(&raw_h, &w->ret_d0, sizeof(raw_h));
     double rw = 0.0, rh_unused = 0.0;
-    if (ld_fof_read_raw_cell(ctx, &rw, &rh_unused)) {
+    if (ld_fof_read_raw_cell(&ctx, &rw, &rh_unused)) {
         struct ld_fof_geom g;
-        if (ld_fof_compute_geom(ctx, (uintptr_t)f.arg_x1, -1.0, rw, raw_h, &g) && g.scaled) {
-            ld_fof_write_q_double(&ctx->q[0][0], g.eff_cell_h);
+        if (ld_fof_compute_geom(&ctx, (uintptr_t)w->x[1], -1.0, rw, raw_h, &g) && g.scaled) {
+            memcpy(&w->ret_d0, &g.eff_cell_h, sizeof(g.eff_cell_h));
         }
     }
 }
 
-__attribute__((used)) static void ld_fof_pre_calibrate_h(struct ld_dart_context *ctx) {
-    (void)ld_fof_pre_common(ctx, LD_FOF_TAG_CALIBRATE_H, false);
-}
-__attribute__((used)) static void ld_fof_post_calibrate_h(struct ld_dart_context *ctx) {
-    struct ld_fof_frame f;
-    if (!ld_fof_pop_frame(LD_FOF_TAG_CALIBRATE_H, &f)) return;
-    ctx->x[30] = f.ret_lr;
+__attribute__((used)) static void ld_fof_post_calibrate_h(struct ld_ws_ctx *w) {
+    struct ld_dart_context ctx;
+    ld_fof_ws_to_dart(w, &ctx);
     struct ld_fof_geom g;
-    if (ld_fof_compute_geom(ctx, (uintptr_t)f.arg_x1, -1.0, 0.0, 0.0, &g) && g.scaled) {
-        ld_fof_write_q_double(&ctx->q[0][0], g.eff_cell_h);
+    if (ld_fof_compute_geom(&ctx, (uintptr_t)w->x[1], -1.0, 0.0, 0.0, &g) && g.scaled) {
+        memcpy(&w->ret_d0, &g.eff_cell_h, sizeof(g.eff_cell_h));
     }
 }
 
@@ -784,7 +722,7 @@ __attribute__((used)) static void ld_fof_on_cal_pos_mid(struct ld_dart_context *
     uintptr_t cling = *(const uintptr_t *)(uintptr_t)(ctx->x[29] + (int64_t)g_fof.cal_cling_fp_off);
     if (!ld_fof_ptr_ok(cling, ctx)) return;
     uintptr_t fgvc = ld_fof_uncompress(*(const uint32_t *)(cling + g_fof.cling_fgvc_off), ctx->x[28]);
-    if (!ld_fof_ptr_ok(fgvc, ctx)) return;
+    if (!ld_fof_ptr_ok(fgvc, ctx) || ld_dart_is_ro_addr(fgvc)) return;
 
     double avail_w = ld_fof_read_q_double(&ctx->q[1][0]);
     if (!(avail_w > 100.0 && avail_w < 4000.0)) return;
@@ -799,24 +737,26 @@ __attribute__((used)) static void ld_fof_on_cal_pos_mid(struct ld_dart_context *
     }
 }
 
-__attribute__((used)) static void ld_fof_pre_calc_pos_x(struct ld_dart_context *ctx) {
-    (void)ld_fof_pre_common(ctx, LD_FOF_TAG_CALC_POS_X, true);
+__attribute__((used)) static void ld_fof_pre_calc_pos_x(struct ld_ws_ctx *w) {
+    struct ld_dart_context ctx;
+    ld_fof_ws_to_dart(w, &ctx);
+    (void)ld_fof_read_or_sync_cols(&ctx, true);
 }
-__attribute__((used)) static void ld_fof_post_calc_pos_x(struct ld_dart_context *ctx) {
-    struct ld_fof_frame f;
-    if (!ld_fof_pop_frame(LD_FOF_TAG_CALC_POS_X, &f)) return;
-    ctx->x[30] = f.ret_lr;
+__attribute__((used)) static void ld_fof_post_calc_pos_x(struct ld_ws_ctx *w) {
+    struct ld_dart_context ctx;
+    ld_fof_ws_to_dart(w, &ctx);
 
-    uintptr_t off_obj = (uintptr_t)ctx->x[0];
-    uintptr_t cling = (uintptr_t)f.arg_x1;
-    int64_t idx = (int64_t)f.arg_x2; /* unboxed int64 cell index */
-    if (!ld_fof_ptr_ok(off_obj, ctx) || !ld_fof_ptr_ok(cling, ctx) || idx < 0) return;
+    uintptr_t off_obj = (uintptr_t)w->ret_x0;
+    uintptr_t cling = (uintptr_t)w->x[1];
+    int64_t idx = (int64_t)w->x[2]; /* unboxed int64 cell index */
+    if (!ld_fof_ptr_ok(off_obj, &ctx) || ld_dart_is_ro_addr(off_obj) ||
+        !ld_fof_ptr_ok(cling, &ctx) || idx < 0) return;
 
-    uintptr_t fgvc = ld_fof_uncompress(*(const uint32_t *)(cling + g_fof.cling_fgvc_off), ctx->x[28]);
-    if (!ld_fof_ptr_ok(fgvc, ctx)) return;
+    uintptr_t fgvc = ld_fof_uncompress(*(const uint32_t *)(cling + g_fof.cling_fgvc_off), ctx.x[28]);
+    if (!ld_fof_ptr_ok(fgvc, &ctx)) return;
 
     struct ld_fof_geom g;
-    if (!ld_fof_compute_geom(ctx, fgvc, -1.0, 0.0, 0.0, &g) || !g.scaled || g.cols <= 0) return;
+    if (!ld_fof_compute_geom(&ctx, fgvc, -1.0, 0.0, 0.0, &g) || !g.scaled || g.cols <= 0) return;
 
     int64_t col = idx % g.cols;
     int64_t row = idx / g.cols;
@@ -836,230 +776,48 @@ __attribute__((used)) static void ld_fof_post_calc_pos_x(struct ld_dart_context 
     *(double *)(off_obj + 0xfu) = new_dy;
 }
 
-__attribute__((used)) static void ld_fof_pre_refresh_cached(struct ld_dart_context *ctx) {
-    (void)ld_fof_pre_common(ctx, LD_FOF_TAG_REFRESH_CACHED, false);
-}
-__attribute__((used)) static void ld_fof_post_refresh_cached(struct ld_dart_context *ctx) {
-    struct ld_fof_frame f;
-    if (!ld_fof_pop_frame(LD_FOF_TAG_REFRESH_CACHED, &f)) return;
-    ctx->x[30] = f.ret_lr;
+__attribute__((used)) static void ld_fof_post_refresh_cached(struct ld_ws_ctx *w) {
+    struct ld_dart_context ctx;
+    ld_fof_ws_to_dart(w, &ctx);
 
-    uintptr_t anim = (uintptr_t)f.arg_x1;
-    if (!ld_fof_ptr_ok(anim, ctx)) return;
+    uintptr_t anim = (uintptr_t)w->x[1];
+    if (!ld_fof_ptr_ok(anim, &ctx)) return;
 
-    uintptr_t cw_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_cell_w_off), ctx->x[28]);
-    uintptr_t ch_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_cell_h_off), ctx->x[28]);
-    uintptr_t iw_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_icon_w_off), ctx->x[28]);
-    uintptr_t ih_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_icon_h_off), ctx->x[28]);
-    uintptr_t th_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_title_h_off), ctx->x[28]);
-    uintptr_t pl_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_pad_left_off), ctx->x[28]);
-    uintptr_t pt_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_pad_top_off), ctx->x[28]);
+    uintptr_t cw_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_cell_w_off), ctx.x[28]);
+    uintptr_t ch_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_cell_h_off), ctx.x[28]);
+    uintptr_t iw_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_icon_w_off), ctx.x[28]);
+    uintptr_t ih_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_icon_h_off), ctx.x[28]);
+    uintptr_t th_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_title_h_off), ctx.x[28]);
+    uintptr_t pl_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_pad_left_off), ctx.x[28]);
+    uintptr_t pt_box = ld_fof_uncompress(*(const uint32_t *)(anim + g_fof.anim_pad_top_off), ctx.x[28]);
 
-    if (!ld_fof_ptr_ok(cw_box, ctx) || !ld_fof_ptr_ok(ch_box, ctx) ||
-        !ld_fof_ptr_ok(iw_box, ctx) || !ld_fof_ptr_ok(ih_box, ctx) ||
-        !ld_fof_ptr_ok(th_box, ctx) || !ld_fof_ptr_ok(pl_box, ctx) ||
-        !ld_fof_ptr_ok(pt_box, ctx)) {
+    if (!ld_fof_ptr_ok(cw_box, &ctx) || !ld_fof_ptr_ok(ch_box, &ctx) ||
+        !ld_fof_ptr_ok(iw_box, &ctx) || !ld_fof_ptr_ok(ih_box, &ctx) ||
+        !ld_fof_ptr_ok(th_box, &ctx) || !ld_fof_ptr_ok(pl_box, &ctx) ||
+        !ld_fof_ptr_ok(pt_box, &ctx)) {
         return;
     }
 
     double raw_w = *(const double *)(cw_box + 7u);
     double raw_h = *(const double *)(ch_box + 7u);
     struct ld_fof_geom g;
-    if (!ld_fof_compute_geom(ctx, 0, -1.0, raw_w, raw_h, &g) || !g.scaled) return;
+    if (!ld_fof_compute_geom(&ctx, 0, -1.0, raw_w, raw_h, &g) || !g.scaled) return;
 
     double icon_w = *(const double *)(iw_box + 7u);
     double icon_h = *(const double *)(ih_box + 7u);
     double title_h = *(const double *)(th_box + 7u);
-    *(double *)(cw_box + 7u) = g.eff_cell_w;
-    *(double *)(ch_box + 7u) = g.eff_cell_h;
-    *(double *)(pl_box + 7u) = (g.eff_cell_w - icon_w) * 0.5;
-    *(double *)(pt_box + 7u) = (g.eff_cell_h - icon_h - title_h) * 0.5;
+    if (!ld_dart_is_ro_addr(cw_box)) *(double *)(cw_box + 7u) = g.eff_cell_w;
+    if (!ld_dart_is_ro_addr(ch_box)) *(double *)(ch_box + 7u) = g.eff_cell_h;
+    if (!ld_dart_is_ro_addr(pl_box)) *(double *)(pl_box + 7u) = (g.eff_cell_w - icon_w) * 0.5;
+    if (!ld_dart_is_ro_addr(pt_box)) *(double *)(pt_box + 7u) = (g.eff_cell_h - icon_h - title_h) * 0.5;
 }
 
-/* ---- Pre+post TLS shadow-stack trampoline (CSP-free across orig()) ---- */
-
-#define LD_FOF_PRE_POST_OBSERVER(name, pre_cb, post_cb, original) \
-__attribute__((naked, used)) static void name(void) { \
-    __asm__ volatile( \
-        "stp x16, x17, [x15, #-16]\n" \
-        "mov x16, sp\n" \
-        "sub x17, x15, #832\n" \
-        "and x17, x17, #0xfffffffffffffff0\n" \
-        "mov sp, x17\n" \
-        "str x16, [sp, #776]\n" \
-        "stp x0, x1, [sp, #0]\n" \
-        "stp x2, x3, [sp, #16]\n" \
-        "stp x4, x5, [sp, #32]\n" \
-        "stp x6, x7, [sp, #48]\n" \
-        "stp x8, x9, [sp, #64]\n" \
-        "stp x10, x11, [sp, #80]\n" \
-        "stp x12, x13, [sp, #96]\n" \
-        "stp x14, x15, [sp, #112]\n" \
-        "ldur x16, [x15, #-16]\n" \
-        "ldur x17, [x15, #-8]\n" \
-        "stp x16, x17, [sp, #128]\n" \
-        "stp x18, x19, [sp, #144]\n" \
-        "stp x20, x21, [sp, #160]\n" \
-        "stp x22, x23, [sp, #176]\n" \
-        "stp x24, x25, [sp, #192]\n" \
-        "stp x26, x27, [sp, #208]\n" \
-        "stp x28, x29, [sp, #224]\n" \
-        "str x30, [sp, #240]\n" \
-        "stp q0, q1, [sp, #256]\n" \
-        "stp q2, q3, [sp, #288]\n" \
-        "stp q4, q5, [sp, #320]\n" \
-        "stp q6, q7, [sp, #352]\n" \
-        "stp q8, q9, [sp, #384]\n" \
-        "stp q10, q11, [sp, #416]\n" \
-        "stp q12, q13, [sp, #448]\n" \
-        "stp q14, q15, [sp, #480]\n" \
-        "stp q16, q17, [sp, #512]\n" \
-        "stp q18, q19, [sp, #544]\n" \
-        "stp q20, q21, [sp, #576]\n" \
-        "stp q22, q23, [sp, #608]\n" \
-        "stp q24, q25, [sp, #640]\n" \
-        "stp q26, q27, [sp, #672]\n" \
-        "stp q28, q29, [sp, #704]\n" \
-        "stp q30, q31, [sp, #736]\n" \
-        "mrs x16, nzcv\n" \
-        "str x16, [sp, #768]\n" \
-        "mov x0, sp\n" \
-        "bl " #pre_cb "\n" \
-        "ldr x16, [sp, #768]\n" \
-        "msr nzcv, x16\n" \
-        "ldp q0, q1, [sp, #256]\n" \
-        "ldp q2, q3, [sp, #288]\n" \
-        "ldp q4, q5, [sp, #320]\n" \
-        "ldp q6, q7, [sp, #352]\n" \
-        "ldp q8, q9, [sp, #384]\n" \
-        "ldp q10, q11, [sp, #416]\n" \
-        "ldp q12, q13, [sp, #448]\n" \
-        "ldp q14, q15, [sp, #480]\n" \
-        "ldp q16, q17, [sp, #512]\n" \
-        "ldp q18, q19, [sp, #544]\n" \
-        "ldp q20, q21, [sp, #576]\n" \
-        "ldp q22, q23, [sp, #608]\n" \
-        "ldp q24, q25, [sp, #640]\n" \
-        "ldp q26, q27, [sp, #672]\n" \
-        "ldp q28, q29, [sp, #704]\n" \
-        "ldp q30, q31, [sp, #736]\n" \
-        "ldp x0, x1, [sp, #0]\n" \
-        "ldp x2, x3, [sp, #16]\n" \
-        "ldp x4, x5, [sp, #32]\n" \
-        "ldp x6, x7, [sp, #48]\n" \
-        "ldp x8, x9, [sp, #64]\n" \
-        "ldp x10, x11, [sp, #80]\n" \
-        "ldp x12, x13, [sp, #96]\n" \
-        "ldp x14, x15, [sp, #112]\n" \
-        "ldr x17, [sp, #136]\n" \
-        "ldp x18, x19, [sp, #144]\n" \
-        "ldp x20, x21, [sp, #160]\n" \
-        "ldp x22, x23, [sp, #176]\n" \
-        "ldp x24, x25, [sp, #192]\n" \
-        "ldp x26, x27, [sp, #208]\n" \
-        "ldp x28, x29, [sp, #224]\n" \
-        "ldr x30, [sp, #240]\n" \
-        "ldr x16, [sp, #248]\n" \
-        "cbz x16, 1f\n" \
-        "ldr x16, [sp, #776]\n" \
-        "mov sp, x16\n" \
-        "adrp x16, " #original "\n" \
-        "ldr x16, [x16, :lo12:" #original "]\n" \
-        "blr x16\n" \
-        "stp x16, x17, [x15, #-16]\n" \
-        "mov x16, sp\n" \
-        "sub x17, x15, #832\n" \
-        "and x17, x17, #0xfffffffffffffff0\n" \
-        "mov sp, x17\n" \
-        "str x16, [sp, #776]\n" \
-        "stp x0, x1, [sp, #0]\n" \
-        "stp x2, x3, [sp, #16]\n" \
-        "stp x4, x5, [sp, #32]\n" \
-        "stp x6, x7, [sp, #48]\n" \
-        "stp x8, x9, [sp, #64]\n" \
-        "stp x10, x11, [sp, #80]\n" \
-        "stp x12, x13, [sp, #96]\n" \
-        "stp x14, x15, [sp, #112]\n" \
-        "ldur x16, [x15, #-16]\n" \
-        "ldur x17, [x15, #-8]\n" \
-        "stp x16, x17, [sp, #128]\n" \
-        "stp x18, x19, [sp, #144]\n" \
-        "stp x20, x21, [sp, #160]\n" \
-        "stp x22, x23, [sp, #176]\n" \
-        "stp x24, x25, [sp, #192]\n" \
-        "stp x26, x27, [sp, #208]\n" \
-        "stp x28, x29, [sp, #224]\n" \
-        "str x30, [sp, #240]\n" \
-        "stp q0, q1, [sp, #256]\n" \
-        "stp q2, q3, [sp, #288]\n" \
-        "stp q4, q5, [sp, #320]\n" \
-        "stp q6, q7, [sp, #352]\n" \
-        "stp q8, q9, [sp, #384]\n" \
-        "stp q10, q11, [sp, #416]\n" \
-        "stp q12, q13, [sp, #448]\n" \
-        "stp q14, q15, [sp, #480]\n" \
-        "stp q16, q17, [sp, #512]\n" \
-        "stp q18, q19, [sp, #544]\n" \
-        "stp q20, q21, [sp, #576]\n" \
-        "stp q22, q23, [sp, #608]\n" \
-        "stp q24, q25, [sp, #640]\n" \
-        "stp q26, q27, [sp, #672]\n" \
-        "stp q28, q29, [sp, #704]\n" \
-        "stp q30, q31, [sp, #736]\n" \
-        "mrs x16, nzcv\n" \
-        "str x16, [sp, #768]\n" \
-        "mov x0, sp\n" \
-        "bl " #post_cb "\n" \
-        "ldr x16, [sp, #768]\n" \
-        "msr nzcv, x16\n" \
-        "ldp q0, q1, [sp, #256]\n" \
-        "ldp q2, q3, [sp, #288]\n" \
-        "ldp q4, q5, [sp, #320]\n" \
-        "ldp q6, q7, [sp, #352]\n" \
-        "ldp q8, q9, [sp, #384]\n" \
-        "ldp q10, q11, [sp, #416]\n" \
-        "ldp q12, q13, [sp, #448]\n" \
-        "ldp q14, q15, [sp, #480]\n" \
-        "ldp q16, q17, [sp, #512]\n" \
-        "ldp q18, q19, [sp, #544]\n" \
-        "ldp q20, q21, [sp, #576]\n" \
-        "ldp q22, q23, [sp, #608]\n" \
-        "ldp q24, q25, [sp, #640]\n" \
-        "ldp q26, q27, [sp, #672]\n" \
-        "ldp q28, q29, [sp, #704]\n" \
-        "ldp q30, q31, [sp, #736]\n" \
-        "ldp x0, x1, [sp, #0]\n" \
-        "ldp x2, x3, [sp, #16]\n" \
-        "ldp x4, x5, [sp, #32]\n" \
-        "ldp x6, x7, [sp, #48]\n" \
-        "ldp x8, x9, [sp, #64]\n" \
-        "ldp x10, x11, [sp, #80]\n" \
-        "ldp x12, x13, [sp, #96]\n" \
-        "ldp x14, x15, [sp, #112]\n" \
-        "ldr x17, [sp, #136]\n" \
-        "ldp x18, x19, [sp, #144]\n" \
-        "ldp x20, x21, [sp, #160]\n" \
-        "ldp x22, x23, [sp, #176]\n" \
-        "ldp x24, x25, [sp, #192]\n" \
-        "ldp x26, x27, [sp, #208]\n" \
-        "ldp x28, x29, [sp, #224]\n" \
-        "ldr x30, [sp, #240]\n" \
-        "ldr x16, [sp, #776]\n" \
-        "mov sp, x16\n" \
-        "ret\n" \
-        "1: ldr x16, [sp, #776]\n" \
-        "mov sp, x16\n" \
-        "adrp x16, " #original "\n" \
-        "ldr x16, [x16, :lo12:" #original "]\n" \
-        "br x16\n"); \
-}
-
-LD_FOF_PRE_POST_OBSERVER(repl_fof_cell_w, ld_fof_pre_cell_w, ld_fof_post_cell_w, g_orig_fof_cell_w)
-LD_FOF_PRE_POST_OBSERVER(repl_fof_cell_h, ld_fof_pre_cell_h, ld_fof_post_cell_h, g_orig_fof_cell_h)
-LD_FOF_PRE_POST_OBSERVER(repl_fof_calibrate_h, ld_fof_pre_calibrate_h, ld_fof_post_calibrate_h, g_orig_fof_calibrate_h)
+LD_WS_POST_OBSERVER(repl_fof_cell_w, ld_fof_post_cell_w, g_orig_fof_cell_w)
+LD_WS_POST_OBSERVER(repl_fof_cell_h, ld_fof_post_cell_h, g_orig_fof_cell_h)
+LD_WS_POST_OBSERVER(repl_fof_calibrate_h, ld_fof_post_calibrate_h, g_orig_fof_calibrate_h)
 LD_DART_OBSERVER(repl_fof_cal_pos_mid, ld_fof_on_cal_pos_mid, g_orig_fof_cal_pos_mid)
-LD_FOF_PRE_POST_OBSERVER(repl_fof_calc_pos_x, ld_fof_pre_calc_pos_x, ld_fof_post_calc_pos_x, g_orig_fof_calc_pos_x)
-LD_FOF_PRE_POST_OBSERVER(repl_fof_refresh_cached, ld_fof_pre_refresh_cached, ld_fof_post_refresh_cached, g_orig_fof_refresh_cached)
+LD_WS_PRE_POST_OBSERVER(repl_fof_calc_pos_x, ld_fof_pre_calc_pos_x, ld_fof_post_calc_pos_x, g_orig_fof_calc_pos_x)
+LD_WS_POST_OBSERVER(repl_fof_refresh_cached, ld_fof_post_refresh_cached, g_orig_fof_refresh_cached)
 
 static void ld_folder_open_fix_install(const struct native_api *api, const ld_lib_info *lib) {
     static bool s_attempted = false;

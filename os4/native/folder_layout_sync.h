@@ -402,8 +402,8 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
         unsigned fresh = 0;
         for (unsigned i = 0; i < len; i++) {
             int ours = slot->written_valid &&
-                       fabs(cur[i].x + ph - slot->written[i].x) <= 0.05 &&
-                       fabs(cur[i].y + pv - slot->written[i].y) <= 0.05 &&
+                       fabs(cur[i].x - slot->written[i].x) <= 0.05 &&
+                       fabs(cur[i].y - slot->written[i].y) <= 0.05 &&
                        fabs(cur[i].width - slot->written[i].width) <= 0.05 &&
                        fabs(cur[i].height - slot->written[i].height) <= 0.05;
             if (!ours) {
@@ -486,7 +486,9 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
         memcpy((void *)(items[i] + 15u), &adj[i].height, sizeof adj[i].height);
         memcpy((void *)(items[i] + 23u), &nx, sizeof nx);
         memcpy((void *)(items[i] + 31u), &ny, sizeof ny);
-        slot->written[i] = (struct ld_folder_preview_rect){nx, ny, adj[i].width, adj[i].height};
+        /* Store strategy-local (x, y) without ph/pv so subsequent padding syncs
+         * do not invalidate the idempotency check and compound scale/inset. */
+        slot->written[i] = (struct ld_folder_preview_rect){adj[i].x, adj[i].y, adj[i].width, adj[i].height};
     }
     if (g_fls_piw_off && g_fls_pih_off && !ld_ws_is_const_ro(strat)) {
         memcpy((void *)(strat + g_fls_piw_off), &adj[0].width, sizeof adj[0].width);
@@ -495,9 +497,6 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
     slot->written_valid = 1;
     slot->applied_inset = inset;
     slot->applied_pct = pct;
-    if (is_ten_icon && inset != 0.0) {
-        __atomic_store_n(&g_fls_ten_icon_inset_active, 1, __ATOMIC_RELEASE);
-    }
     static unsigned ti_logs;
     if (ti_logs++ < 16u) {
         ld_blog("folder_layout_sync: preview synced cid=0x%x span=%dx%d len=%u pct=%d%% inset=%.1f orig0=(%.2f,%.2f,%.2f) adj0=(%.2f,%.2f,%.2f)",
@@ -578,43 +577,42 @@ __attribute__((used)) static void ld_fls_post_cal_item_size(struct ld_ws_ctx *c)
     double title_h = ch * (double)span_y - fh - 2.0 * pv;
     if (!isfinite(title_h) || title_h < -1.0 || title_h > ch * 0.85) return;
 
-    ld_fls_record_cid(cid, span_x, span_y, title_h);
     uint64_t null_obj = 0;
     if (c->x[27]) ld_read_heap((uintptr_t)c->x[27] + 64u, &null_obj, sizeof null_obj);
-    if (span_x == 1 && span_y == 1) {
+    uint32_t hot_w = 0;
+    int in_hotseat = (span_x == 1 && span_y == 1) &&
+                     ld_read_heap(strat + 0x43u, &hot_w, sizeof hot_w) &&
+                     hot_w == (uint32_t)(null_obj + 0x20u);
+    if (in_hotseat) return;
+    ld_fls_record_cid(cid, span_x, span_y, title_h);
+    if (span_x == 1 && span_y == 1 && !ld_ws_is_const_ro(strat)) {
         double ws_ratio = ld_ws_icon_ratio(NULL);
         if (ws_ratio != 1.0) {
-            uint32_t hot_w = 0;
-            int in_hotseat = ld_read_heap(strat + 0x43u, &hot_w, sizeof hot_w) &&
-                             (hot_w & 1u) && (uint32_t)hot_w != (uint32_t)null_obj &&
-                             ((hot_w & 0x10u) == 0u);
-            if (!in_hotseat) {
-                double nfw = fw * ws_ratio;
-                double nfh = fh * ws_ratio;
-                if (isfinite(nfw) && isfinite(nfh) && nfw >= 10.0 && nfw <= 400.0 && nfh >= 10.0 && nfh <= 400.0) {
-                    double nph = ph - 0.5 * (nfw - fw);
-                    double npv = pv - 0.5 * (nfh - fh);
-                    if (isfinite(nph) && isfinite(npv)) {
-                        memcpy((void *)(strat + g_fls_fw_off), &nfw, sizeof nfw);
-                        memcpy((void *)(strat + g_fls_fh_off), &nfh, sizeof nfh);
-                        memcpy((void *)(strat + g_fls_ph_off), &nph, sizeof nph);
-                        memcpy((void *)(strat + g_fls_pv_off), &npv, sizeof npv);
-                        fw = nfw;
-                        fh = nfh;
-                        ph = nph;
-                        pv = npv;
-                    }
+            double nfw = fw * ws_ratio;
+            double nfh = fh * ws_ratio;
+            if (isfinite(nfw) && isfinite(nfh) && nfw >= 10.0 && nfw <= 400.0 && nfh >= 10.0 && nfh <= 400.0) {
+                double nph = ph - 0.5 * (nfw - fw);
+                double npv = pv - 0.5 * (nfh - fh);
+                if (isfinite(nph) && isfinite(npv)) {
+                    memcpy((void *)(strat + g_fls_fw_off), &nfw, sizeof nfw);
+                    memcpy((void *)(strat + g_fls_fh_off), &nfh, sizeof nfh);
+                    memcpy((void *)(strat + g_fls_ph_off), &nph, sizeof nph);
+                    memcpy((void *)(strat + g_fls_pv_off), &npv, sizeof npv);
+                    fw = nfw;
+                    fh = nfh;
+                    ph = nph;
+                    pv = npv;
                 }
-                double pw = 0.0, ph_box = 0.0;
-                if (ld_read_heap(strat + 0x27u, &pw, sizeof pw) &&
-                    ld_read_heap(strat + 0x1fu, &ph_box, sizeof ph_box) &&
-                    isfinite(pw) && isfinite(ph_box) &&
-                    pw >= 10.0 && pw <= 400.0 && ph_box >= 10.0 && ph_box <= 400.0) {
-                    double npw = pw * ws_ratio;
-                    double nph_box = ph_box * ws_ratio;
-                    memcpy((void *)(strat + 0x27u), &npw, sizeof npw);
-                    memcpy((void *)(strat + 0x1fu), &nph_box, sizeof nph_box);
-                }
+            }
+            double pw = 0.0, ph_box = 0.0;
+            if (ld_read_heap(strat + 0x27u, &pw, sizeof pw) &&
+                ld_read_heap(strat + 0x1fu, &ph_box, sizeof ph_box) &&
+                isfinite(pw) && isfinite(ph_box) &&
+                pw >= 10.0 && pw <= 400.0 && ph_box >= 10.0 && ph_box <= 400.0) {
+                double npw = pw * ws_ratio;
+                double nph_box = ph_box * ws_ratio;
+                memcpy((void *)(strat + 0x27u), &npw, sizeof npw);
+                memcpy((void *)(strat + 0x1fu), &nph_box, sizeof nph_box);
             }
         }
     }
@@ -648,6 +646,13 @@ __attribute__((used)) static void ld_fls_post_put_if_absent(struct ld_ws_ctx *c)
     uint32_t cid = (hdr >> 12) & 0xfffffu;
     struct ld_fls_cid_entry *e = ld_fls_find_cid(cid);
     if (!e) return;
+    if (e->span_x == 1 && e->span_y == 1) {
+        uint32_t hot_w = 0;
+        if (ld_read_heap(strat + 0x43u, &hot_w, sizeof hot_w) &&
+            hot_w == (uint32_t)(null_obj + 0x20u)) {
+            return;
+        }
+    }
 
     double fw = 0.0, fh = 0.0, cur_pv = 0.0, cur_ph = 0.0;
     if (!ld_read_heap(strat + g_fls_fw_off, &fw, sizeof fw) ||
@@ -753,17 +758,21 @@ static void ld_folder_layout_sync_install(const struct native_api *api, ld_lib_i
         return;
     }
     void *bk_cal = NULL, *bk_put = NULL;
-    if (api->hook((void *)fn_cal, (void *)repl_fls_cal_item_size, &bk_cal) != 0 || !bk_cal) {
-        ld_blog("folder_layout_sync: calItemSize hook failed");
-        return;
+    if (!g_orig_fls_cal_item_size) {
+        if (api->hook((void *)fn_cal, (void *)repl_fls_cal_item_size, &bk_cal) != 0 || !bk_cal) {
+            ld_blog("folder_layout_sync: calItemSize hook failed");
+            return;
+        }
+        g_orig_fls_cal_item_size = bk_cal;
     }
-    g_orig_fls_cal_item_size = bk_cal;
 
-    if (api->hook((void *)fn_put, (void *)repl_fls_put_if_absent, &bk_put) != 0 || !bk_put) {
-        ld_blog("folder_layout_sync: putIfAbsent hook failed");
-        return;
+    if (!g_orig_fls_put_if_absent) {
+        if (api->hook((void *)fn_put, (void *)repl_fls_put_if_absent, &bk_put) != 0 || !bk_put) {
+            ld_blog("folder_layout_sync: putIfAbsent hook failed");
+            return;
+        }
+        g_orig_fls_put_if_absent = bk_put;
     }
-    g_orig_fls_put_if_absent = bk_put;
 
     __atomic_store_n(&g_fls_ready, 1, __ATOMIC_RELEASE);
     ld_blog("folder_layout_sync: installed strat=0x%x fw=%u fh=%u pv=%u ph=%u list=%u def=%u piw=0x%x pih=0x%x",

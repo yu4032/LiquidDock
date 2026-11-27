@@ -768,6 +768,10 @@ static void ld_w1x1_menu_install(const struct native_api *api, const ld_lib_info
         { LD_W1X1_WS_ON_INIT, (void *)repl_w1x1_ws_on_init, &g_orig_w1x1_ws_on_init },
     };
     for (size_t i = 0; i < 8; i++) {
+        if (*hooks[i].orig) {
+            ok++;
+            continue;
+        }
         uintptr_t rt = (uintptr_t)g_w1x1_rt[hooks[i].idx];
         if (api->hook((void *)rt, hooks[i].repl, hooks[i].orig) == 0 &&
             *hooks[i].orig && ld_pin_code_pages_soft(rt, 16)) {

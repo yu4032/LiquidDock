@@ -57,7 +57,7 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
          * icons when the user explicitly enables icon_downsample == 1. */
         int is_small_icon = 0;
 #ifdef LD_GLASS_SUPERELLIPSE_H
-        is_small_icon = g_ld_gse_tls_is_small_icon;
+        is_small_icon = (g_ld_gse_tls_kind == LD_GLASS_KIND_SMALL_ICON);
 #endif
         int downsample_icon = is_small_icon &&
             __atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED);

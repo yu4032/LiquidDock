@@ -93,10 +93,17 @@ static volatile unsigned g_ld_gse_calls;
 static volatile float g_ld_gse_large_folder_corner;
 static volatile float g_ld_gse_large_folder_2x1_corner;
 static volatile float g_ld_gse_widget_corner;
-static __thread int g_ld_gse_tls_is_small_icon;
-static __thread int g_ld_gse_tls_is_dock;
-static __thread int g_ld_gse_tls_is_widget;
-static __thread int g_ld_gse_tls_is_large_folder;
+
+enum ld_glass_kind {
+    LD_GLASS_KIND_NONE = 0,
+    LD_GLASS_KIND_DOCK,
+    LD_GLASS_KIND_CIRCULAR,
+    LD_GLASS_KIND_SMALL_ICON,
+    LD_GLASS_KIND_LARGE_FOLDER_2X1,
+    LD_GLASS_KIND_LARGE_FOLDER,
+    LD_GLASS_KIND_WIDGET,
+};
+static __thread enum ld_glass_kind g_ld_gse_tls_kind;
 
 /* Observed large-folder (span_x, span_y) -> (w, h) in dp, populated by folder_size.h.
  * Used to distinguish large folders (2x1, 1x2, 2x2, 4x2, ...) from widgets when
@@ -148,6 +155,36 @@ static inline int ld_gse_matches_recorded_large_folder(float w, float h)
         }
     }
     return 0;
+}
+
+/* Single source of truth for classifying glass rects across glass_superellipse.h,
+ * prismal_glass.h, and glass_filter_hook.h (all dimensions in dp). */
+static inline enum ld_glass_kind ld_gse_classify_rect(float w, float h, float rx, float ry,
+                                                      int dock, float wg_c)
+{
+    if (dock) return LD_GLASS_KIND_DOCK;
+    float min_dim = fminf(w, h);
+    float max_dim = fmaxf(w, h);
+    if (max_dim <= 1.0f) return LD_GLASS_KIND_NONE;
+    if (max_dim < 115.0f) return LD_GLASS_KIND_SMALL_ICON;
+    /* Preserve native full-circle widgets (e.g. 2x2 circular clock) while allowing
+     * elongated 2x1/1x2 large folders (aspect > 1.35). */
+    if (max_dim <= min_dim * 1.35f &&
+        (rx >= min_dim * 0.45f || ry >= min_dim * 0.45f)) {
+        return LD_GLASS_KIND_CIRCULAR;
+    }
+    float aspect = max_dim / fmaxf(min_dim, 1.0f);
+    int is_known_folder_size = ld_gse_matches_recorded_large_folder(w, h) ||
+                               (fabsf(w - h) < 4.0f && fabsf(w - 169.7f) < 12.0f);
+    if (min_dim >= 68.0f && max_dim <= 800.0f && aspect <= 3.2f &&
+        (rx <= 15.2f || (wg_c > 0.0f && fabsf(rx - wg_c) < 0.5f && !is_known_folder_size))) {
+        return LD_GLASS_KIND_WIDGET;
+    }
+    if (min_dim >= 45.0f && max_dim >= 120.0f && max_dim <= 800.0f && aspect <= 4.0f &&
+        rx > 15.2f) {
+        return (min_dim < 120.0f) ? LD_GLASS_KIND_LARGE_FOLDER_2X1 : LD_GLASS_KIND_LARGE_FOLDER;
+    }
+    return LD_GLASS_KIND_NONE;
 }
 
 struct ld_gse_cache_entry {
@@ -222,7 +259,8 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     float rad[2] = {0, 0};
     float quad[4] = {0, 0, 0, 0};
     float n_old = -1.0f;
-    int dock = 0, patched = 0, matched_widget = 0, matched_large_folder = 0;
+    int dock = 0, patched = 0;
+    enum ld_glass_kind glass_kind = LD_GLASS_KIND_NONE;
     float w = 0, h = 0;
 
     if (canvas) {
@@ -270,47 +308,32 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
 
     /* 对所有圆角矩形或超椭圆记录（kind==1，半径>0）按组件圆角更新并合成超椭圆参数。 */
     if (rec && kind == 1 && (rad[0] > 0.5f || rad[1] > 0.5f) && g_ld_gse_compute) {
+        float wg_c = g_ld_gse_widget_corner;
+        glass_kind = ld_gse_classify_rect(w, h, rad[0], rad[1], dock, wg_c);
         if (!g_ld_gse_logonly) {
             float min_dim = fminf(w, h);
             float max_dim = fmaxf(w, h);
             int radius_overridden = 0;
             float lf_c = g_ld_gse_large_folder_corner;
             float lf_2x1_c = g_ld_gse_large_folder_2x1_corner;
-            float wg_c = g_ld_gse_widget_corner;
-            /* 按原始圆角区分小组件（<=15.2dp，原生 14dp，含堆叠小组件滚动切换时的非零原点）
-             * 与大文件夹（>15.2dp，原生 16.7dp+，含 2x2/1x2/2x1/3x1 及长按拖动浮层）。
-             * 大文件夹再按短边区分：2x1/1x2/3x1 窄条（min_dim < 120dp）与 2x2 及以上（>= 120dp）。 */
-            /* 保留原生圆形小组件（如 2x2 圆形时钟，接近正方形且圆角 >= 0.45*min_dim），
-             * 不误拦 2x1/1x2 等细长条形大文件夹（长宽比 > 1.35）。 */
-            int is_circular = (max_dim <= min_dim * 1.35f) &&
-                              (rad[0] >= min_dim * 0.45f || rad[1] >= min_dim * 0.45f);
-            int is_known_folder_size = ld_gse_matches_recorded_large_folder(w, h) ||
-                                       (fabsf(w - h) < 4.0f && fabsf(w - 169.7f) < 12.0f);
-            int is_widget = !dock && !is_circular && min_dim >= 68.0f && max_dim >= 115.0f && max_dim <= 800.0f &&
-                            (max_dim / fmaxf(min_dim, 1.0f)) <= 3.2f &&
-                            (rad[0] <= 15.2f || (wg_c > 0.0f && fabsf(rad[0] - wg_c) < 0.5f && !is_known_folder_size));
-            matched_widget = is_widget;
-            int is_large_folder = !dock && !is_circular && !is_widget && min_dim >= 45.0f && max_dim >= 120.0f &&
-                                  max_dim <= 800.0f && (max_dim / fmaxf(min_dim, 1.0f)) <= 4.0f &&
-                                  rad[0] > 15.2f;
-            matched_large_folder = is_large_folder;
-            float eff_lf_c = (min_dim < 120.0f && lf_2x1_c > 0.0f) ? lf_2x1_c : lf_c;
-            if (is_large_folder && eff_lf_c > 0.0f) {
-                float r_lf = fminf(eff_lf_c, min_dim * 0.5f);
-                rad[0] = rad[1] = r_lf;
-                quad[0] = quad[1] = quad[2] = quad[3] = r_lf;
-                memcpy(rec + LD_GSE_OFF_RADII, rad, sizeof rad);
-                memcpy(rec + LD_GSE_OFF_QUAD, quad, sizeof quad);
-                radius_overridden = 1;
-            } else if (is_widget && wg_c > 0.0f) {
-                float r_w = fminf(wg_c, min_dim * 0.5f);
-                rad[0] = rad[1] = r_w;
-                quad[0] = quad[1] = quad[2] = quad[3] = r_w;
+            float target_r = 0.0f;
+            if (glass_kind == LD_GLASS_KIND_LARGE_FOLDER_2X1) {
+                target_r = lf_2x1_c > 0.0f ? lf_2x1_c : lf_c;
+            } else if (glass_kind == LD_GLASS_KIND_LARGE_FOLDER) {
+                target_r = lf_c;
+            } else if (glass_kind == LD_GLASS_KIND_WIDGET) {
+                target_r = wg_c;
+            }
+            if (target_r > 0.0f) {
+                float r_ov = fminf(target_r, min_dim * 0.5f);
+                rad[0] = rad[1] = r_ov;
+                quad[0] = quad[1] = quad[2] = quad[3] = r_ov;
                 memcpy(rec + LD_GSE_OFF_RADII, rad, sizeof rad);
                 memcpy(rec + LD_GSE_OFF_QUAD, quad, sizeof quad);
                 radius_overridden = 1;
             }
-            if (!is_circular && (dock || max_dim >= 115.0f) && (!(n_old > 2.0f) || radius_overridden)) {
+            if (glass_kind != LD_GLASS_KIND_CIRCULAR && (dock || max_dim >= 115.0f) &&
+                (!(n_old > 2.0f) || radius_overridden)) {
                 __attribute__((aligned(16))) uint8_t params[LD_GSE_PARAMS_SIZE];
                 float n_new = 0.0f;
                 if (!ld_gse_cache_lookup(w, h, rad[0], rad[1], params, &n_new)) {
@@ -344,24 +367,18 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
         }
     }
 
-    int prev_small_icon = g_ld_gse_tls_is_small_icon;
-    int prev_dock = g_ld_gse_tls_is_dock;
-    int prev_widget = g_ld_gse_tls_is_widget;
-    int prev_large_folder = g_ld_gse_tls_is_large_folder;
-    float max_d = fmaxf(w, h);
-    g_ld_gse_tls_is_small_icon = (rec != NULL && !dock && max_d > 1.0f && max_d < 115.0f);
-    g_ld_gse_tls_is_dock = (rec != NULL && dock);
-    g_ld_gse_tls_is_widget = matched_widget;
-    g_ld_gse_tls_is_large_folder = matched_large_folder;
+    enum ld_glass_kind prev_kind = g_ld_gse_tls_kind;
+    if (glass_kind == LD_GLASS_KIND_NONE && rec != NULL) {
+        if (dock) glass_kind = LD_GLASS_KIND_DOCK;
+        else if (fmaxf(w, h) > 1.0f && fmaxf(w, h) < 115.0f) glass_kind = LD_GLASS_KIND_SMALL_ICON;
+    }
+    g_ld_gse_tls_kind = glass_kind;
 
     void *ret = NULL;
     if (g_ld_gse_orig_dhm)
         ret = ((ld_gse_dhm_fn)g_ld_gse_orig_dhm)(self, a1, a2, a3,
                                                  a4, a5, a6, a7, a8);
-    g_ld_gse_tls_is_small_icon = prev_small_icon;
-    g_ld_gse_tls_is_dock = prev_dock;
-    g_ld_gse_tls_is_widget = prev_widget;
-    g_ld_gse_tls_is_large_folder = prev_large_folder;
+    g_ld_gse_tls_kind = prev_kind;
     (void)patched;
     return ret;
 }

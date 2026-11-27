@@ -55,16 +55,18 @@ _Static_assert(__builtin_offsetof(struct ld_ws_ctx, saved_csp) == 312, "saved_cs
 
 typedef void (*ld_ws_cb_t)(struct ld_ws_ctx *);
 
-enum { LD_WS_SHADOW_MAX = 32 };
+enum { LD_WS_SHADOW_MAX = 64 };
 static __thread struct ld_ws_ctx g_ws_shadow[LD_WS_SHADOW_MAX];
+static __thread struct ld_ws_ctx g_ws_shadow_overflow;
 static __thread uint32_t g_ws_shadow_depth;
 
 __attribute__((used, noinline)) static struct ld_ws_ctx *
 ld_ws_frame_push(const struct ld_ws_ctx *tmp, ld_ws_cb_t pre_cb)
 {
     uint32_t depth = g_ws_shadow_depth;
-    if (depth >= LD_WS_SHADOW_MAX) depth = LD_WS_SHADOW_MAX - 1u;
-    struct ld_ws_ctx *slot = &g_ws_shadow[depth];
+    struct ld_ws_ctx *slot = (depth < LD_WS_SHADOW_MAX)
+        ? &g_ws_shadow[depth]
+        : &g_ws_shadow_overflow;
     memcpy(slot, tmp, sizeof(*slot));
     g_ws_shadow_depth = depth + 1u;
     if (pre_cb) pre_cb(slot);
@@ -78,7 +80,9 @@ ld_ws_frame_pop_and_post(struct ld_ws_ret_frame *rf, ld_ws_cb_t post_cb)
     if (depth == 0u) return;
     depth -= 1u;
     g_ws_shadow_depth = depth;
-    struct ld_ws_ctx *slot = &g_ws_shadow[depth];
+    struct ld_ws_ctx *slot = (depth < LD_WS_SHADOW_MAX)
+        ? &g_ws_shadow[depth]
+        : &g_ws_shadow_overflow;
     slot->ret_x0 = rf->ret_x0;
     slot->ret_d0 = rf->ret_d0;
     slot->post_x15 = rf->post_x15;
@@ -176,7 +180,6 @@ static volatile uint64_t g_ws_device_width_bits __attribute__((used));
 
 static void *g_orig_ws_is_laptop __attribute__((used));
 static void *g_orig_ws_margin_bottom __attribute__((used));
-static void *g_orig_ws_dock_icon_top __attribute__((used));
 static void *g_orig_ws_apps_padding __attribute__((used));
 static void *g_orig_ws_indicator_pos __attribute__((used));
 static void *g_orig_ws_device_width __attribute__((used));
@@ -329,21 +332,11 @@ __attribute__((used)) static void ld_ws_post_is_laptop(struct ld_ws_ctx *c)
     static int s_prev = -1;
     if (laptop != s_prev) {
         s_prev = laptop;
-        setenv("LD_WS_LAPTOP", laptop ? "1" : "0", 1);
         ld_blog("ws_is_laptop_ret: laptop=%d", laptop);
     }
     __atomic_store_n(&g_ws_is_laptop_mode, laptop, __ATOMIC_RELAXED);
     __atomic_store_n(&g_ws_mode_hint_value, laptop, __ATOMIC_RELAXED);
     __atomic_store_n(&g_ws_mode_hint_pending, 1, __ATOMIC_RELEASE);
-}
-
-__attribute__((used)) static void ld_ws_post_device_width(struct ld_ws_ctx *c)
-{
-    double w = 0.0;
-    memcpy(&w, &c->ret_d0, sizeof w);
-    if (isfinite(w) && w > 100.0 && w < 8192.0) {
-        __atomic_store_n(&g_ws_device_width_bits, c->ret_d0, __ATOMIC_RELAXED);
-    }
 }
 
 static volatile uint64_t g_ws_orig_mb_bits __attribute__((used));
@@ -364,17 +357,25 @@ static inline double ld_ws_effective_dock_v_offset(void)
 
 __attribute__((used)) static void ld_ws_post_margin_bottom(struct ld_ws_ctx *c)
 {
-    if (!ld_ws_is_laptop(c)) return;
-    if (!g_home_options.ws.dock_custom) return;
     double mb = 0.0;
     memcpy(&mb, &c->ret_d0, sizeof mb);
+    if (!isfinite(mb)) return;
+    if (!ld_ws_is_laptop(c)) {
+        /* Normal-mode Dock bottom offset handled here to avoid double-hooking
+         * GridController.hotSeatsMarginBottom with repl_dock_bottom. */
+        if (g_hook_pin_ok && g_home_options.dock.enabled && g_home_options.dock.bottom != 0.0) {
+            double adj = mb + g_home_options.dock.bottom;
+            if (isfinite(adj)) memcpy(&c->ret_d0, &adj, sizeof adj);
+        }
+        return;
+    }
+    if (!g_home_options.ws.dock_custom) return;
     double v_off = ld_ws_effective_dock_v_offset();
     static unsigned logs;
     if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 3) {
         ld_blog("ws_grid_margin_bottom: orig=%.1f taskbar=%d v_off=%.1f",
                 mb, g_home_options.ws.taskbar_mode, v_off);
     }
-    if (!isfinite(mb)) return;
     uint64_t orig_bits = 0;
     memcpy(&orig_bits, &mb, sizeof orig_bits);
     __atomic_store_n(&g_ws_orig_mb_bits, orig_bits, __ATOMIC_RELAXED);
@@ -386,12 +387,6 @@ __attribute__((used)) static void ld_ws_post_margin_bottom(struct ld_ws_ctx *c)
         return;
     }
     memcpy(&c->ret_d0, &mb, sizeof mb);
-}
-
-__attribute__((used)) static void ld_ws_post_dock_icon_top(struct ld_ws_ctx *c)
-{
-    (void)c;
-    return;
 }
 
 static volatile int g_ws_in_allapps_build __attribute__((used));
@@ -1066,8 +1061,7 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
     } specs[9] = {
         { 0, (void *)repl_ws_is_laptop,          &g_orig_ws_is_laptop,     "ws_is_laptop",          1 },
         { 1, (void *)repl_ws_margin_bottom,      &g_orig_ws_margin_bottom, "ws_margin_bottom",      1 },
-        /* idx 2 (ws_dock_icon_top) was a no-op observer; skip hooking it. */
-        { 2, NULL,                               &g_orig_ws_dock_icon_top, "ws_dock_icon_top",      1 },
+        { 2, NULL,                               NULL,                     "ws_dock_icon_top",      1 },
         { 3, (void *)repl_ws_apps_padding,       &g_orig_ws_apps_padding,  "ws_apps_padding",       1 },
         { 4, (void *)repl_ws_indicator_pos,      &g_orig_ws_indicator_pos, "ws_indicator_pos",      1 },
         { 5, (void *)repl_ws_dock_build_content, &g_orig_ws_device_width,  "ws_dock_build_content", 1 },
