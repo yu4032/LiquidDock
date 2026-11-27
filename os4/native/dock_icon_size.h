@@ -37,8 +37,8 @@ static void *g_orig_ws_sc_dim_0 __attribute__((used));
 static void *g_orig_ws_sc_dim_1 __attribute__((used));
 static void *g_orig_ws_sc_dim_2 __attribute__((used));
 static void *g_orig_ws_sc_dim_3 __attribute__((used));
-static uint32_t g_sc_ctrl_info_off __attribute__((used)) = 0x157u;
-static uint32_t g_sc_info_container_off __attribute__((used)) = 0x47u;
+static uint32_t g_ws_sc_info_off[4] __attribute__((used)) = { 0x157u, 0x157u, 0x157u, 0x157u };
+static uint32_t g_ws_sc_cont_off[4] __attribute__((used)) = { 0x47u, 0x47u, 0x47u, 0x47u };
 static int g_dock_icon_scale_installed __attribute__((used));
 
 static inline double ld_dock_icon_ratio(int *is_laptop_out, int *dock_pct_out)
@@ -131,9 +131,9 @@ __attribute__((used)) static void ld_obs_dock_sc_dim(struct ld_dart_context *c)
     }
 }
 
-__attribute__((used)) static void ld_obs_ws_sc_dim(struct ld_dart_context *c)
+__attribute__((used)) static void ld_obs_ws_sc_dim_site(struct ld_dart_context *c, size_t idx)
 {
-    if (!c) return;
+    if (!c || idx >= 4u) return;
     int ws_pct = 100;
     double ratio = ld_ws_icon_ratio(&ws_pct);
     if (ratio == 1.0) return;
@@ -142,12 +142,17 @@ __attribute__((used)) static void ld_obs_ws_sc_dim(struct ld_dart_context *c)
     uintptr_t self = 0;
     if (fp > 4096u && ld_read_heap(fp - 8u, &self, sizeof self) && (self & 1u) && self > 0x100000u) {
         uint32_t info_w = 0;
-        if (ld_read_heap(self + g_sc_ctrl_info_off, &info_w, sizeof info_w) &&
+        if (ld_read_heap(self + g_ws_sc_info_off[idx], &info_w, sizeof info_w) &&
             (info_w & 1u) && info_w != (uint32_t)c->x[22]) {
             uintptr_t info = (uintptr_t)info_w + (c->x[28] << 32);
             int64_t container = 0;
-            if (ld_read_heap(info + g_sc_info_container_off, &container, sizeof container) &&
+            if (ld_read_heap(info + g_ws_sc_cont_off[idx], &container, sizeof container) &&
                 container > 0) {
+                static unsigned skip_logs;
+                if (skip_logs++ < 8u) {
+                    ld_blog("dock_icon_size: ws_sc[%zu] skip folder item container=%lld info_off=0x%x",
+                            idx, (long long)container, g_ws_sc_info_off[idx]);
+                }
                 return;
             }
         }
@@ -160,9 +165,14 @@ __attribute__((used)) static void ld_obs_ws_sc_dim(struct ld_dart_context *c)
     memcpy(c->q[1], &adj, sizeof(double));
     static unsigned logs;
     if (logs++ < 6u) {
-        ld_blog("dock_icon_size: ws_sc ws=%d%% icon=%.2f->%.2f", ws_pct, orig, adj);
+        ld_blog("dock_icon_size: ws_sc[%zu] ws=%d%% icon=%.2f->%.2f", idx, ws_pct, orig, adj);
     }
 }
+
+__attribute__((used)) static void ld_obs_ws_sc_dim_0(struct ld_dart_context *c) { ld_obs_ws_sc_dim_site(c, 0u); }
+__attribute__((used)) static void ld_obs_ws_sc_dim_1(struct ld_dart_context *c) { ld_obs_ws_sc_dim_site(c, 1u); }
+__attribute__((used)) static void ld_obs_ws_sc_dim_2(struct ld_dart_context *c) { ld_obs_ws_sc_dim_site(c, 2u); }
+__attribute__((used)) static void ld_obs_ws_sc_dim_3(struct ld_dart_context *c) { ld_obs_ws_sc_dim_site(c, 3u); }
 
 LD_WS_POST_OBSERVER(repl_dock_icon_scale, ld_post_dock_icon_scale, g_orig_dock_icon_scale)
 LD_WS_POST_OBSERVER(repl_dock_item_w, ld_post_dock_item_dim, g_orig_dock_item_w)
@@ -171,29 +181,31 @@ LD_DART_OBSERVER(repl_dock_sc_dim_0, ld_obs_dock_sc_dim, g_orig_dock_sc_dim_0)
 LD_DART_OBSERVER(repl_dock_sc_dim_1, ld_obs_dock_sc_dim, g_orig_dock_sc_dim_1)
 LD_DART_OBSERVER(repl_dock_sc_dim_2, ld_obs_dock_sc_dim, g_orig_dock_sc_dim_2)
 LD_DART_OBSERVER(repl_dock_sc_dim_3, ld_obs_dock_sc_dim, g_orig_dock_sc_dim_3)
-LD_DART_OBSERVER(repl_ws_sc_dim_0, ld_obs_ws_sc_dim, g_orig_ws_sc_dim_0)
-LD_DART_OBSERVER(repl_ws_sc_dim_1, ld_obs_ws_sc_dim, g_orig_ws_sc_dim_1)
-LD_DART_OBSERVER(repl_ws_sc_dim_2, ld_obs_ws_sc_dim, g_orig_ws_sc_dim_2)
-LD_DART_OBSERVER(repl_ws_sc_dim_3, ld_obs_ws_sc_dim, g_orig_ws_sc_dim_3)
+LD_DART_OBSERVER(repl_ws_sc_dim_0, ld_obs_ws_sc_dim_0, g_orig_ws_sc_dim_0)
+LD_DART_OBSERVER(repl_ws_sc_dim_1, ld_obs_ws_sc_dim_1, g_orig_ws_sc_dim_1)
+LD_DART_OBSERVER(repl_ws_sc_dim_2, ld_obs_ws_sc_dim_2, g_orig_ws_sc_dim_2)
+LD_DART_OBSERVER(repl_ws_sc_dim_3, ld_obs_ws_sc_dim_3, g_orig_ws_sc_dim_3)
 
 /* Inside ShortCutCommonMixin.launcherIconWidth/Height, decode:
  *   - ctrl_info_off & info_container_off from prologue
  *   - Dock branch store site: `stur d0, [x0, #0x7]` (0xfc007000) after `cmn x2, #0x6a`
  *   - Workspace/AllApps branch store site: `stur d1, [x0, #0x7]` (0xfc007001) */
 static bool ld_find_sc_dim_sites(uintptr_t fn, size_t size,
-                                 uintptr_t *out_dock_site, uintptr_t *out_ws_site)
+                                 uintptr_t *out_dock_site, uintptr_t *out_ws_site,
+                                 uint32_t *out_info_off, uint32_t *out_cont_off)
 {
     if (!fn || size < 64u || !executable_range(fn, size)) return false;
     const uint32_t *w = (const uint32_t *)fn;
     size_t n = size / 4u;
     uintptr_t dock_site = 0, ws_site = 0;
+    uint32_t info_off = 0x157u, cont_off = 0x47u;
     for (size_t i = 0; i + 4u < n && i < 16u; i++) {
         if ((w[i] & 0xffe0001fu) == 0xd2800011u && /* mov x17, #ctrl_info_off */
             w[i + 1] == 0xb8716820u && /* ldr w0, [x1, x17] */
             w[i + 2] == 0x8b1c8000u && /* add x0, x0, x28, lsl #32 */
             (w[i + 3] & 0xffe00fffu) == 0xf8400002u) { /* ldur x2, [x0, #container_off] */
-            g_sc_ctrl_info_off = (w[i] >> 5) & 0xffffu;
-            g_sc_info_container_off = (w[i + 3] >> 12) & 0x1ffu;
+            info_off = (w[i] >> 5) & 0xffffu;
+            cont_off = (w[i + 3] >> 12) & 0x1ffu;
             break;
         }
     }
@@ -216,6 +228,8 @@ static bool ld_find_sc_dim_sites(uintptr_t fn, size_t size,
     }
     if (out_dock_site) *out_dock_site = dock_site;
     if (out_ws_site) *out_ws_site = ws_site;
+    if (out_info_off) *out_info_off = info_off;
+    if (out_cont_off) *out_cont_off = cont_off;
     return dock_site != 0;
 }
 
@@ -262,7 +276,9 @@ static void ld_dock_icon_size_install(const struct native_api *api, const ld_lib
         uintptr_t fn = 0;
         if (!ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.dock_icon_size_vaddr[i], &fn)) continue;
         uintptr_t dock_site = 0, ws_site = 0;
-        if (ld_find_sc_dim_sites(fn, g_home_options.dock_icon_size_size[i], &dock_site, &ws_site) &&
+        uint32_t info_off = 0x157u, cont_off = 0x47u;
+        if (ld_find_sc_dim_sites(fn, g_home_options.dock_icon_size_size[i],
+                                 &dock_site, &ws_site, &info_off, &cont_off) &&
             sc_idx < 4u) {
             if (dock_site && executable_range(dock_site, 16u) &&
                 api->hook((void *)dock_site, dock_sc_repls[sc_idx], dock_sc_origs[sc_idx]) == 0 &&
@@ -273,6 +289,8 @@ static void ld_dock_icon_size_install(const struct native_api *api, const ld_lib
             if (ws_site && executable_range(ws_site, 16u) &&
                 api->hook((void *)ws_site, ws_sc_repls[sc_idx], ws_sc_origs[sc_idx]) == 0 &&
                 *ws_sc_origs[sc_idx]) {
+                g_ws_sc_info_off[sc_idx] = info_off;
+                g_ws_sc_cont_off[sc_idx] = cont_off;
                 pin_installed_hook(ws_site);
                 ws_idx++;
                 ok++;
@@ -288,8 +306,10 @@ static void ld_dock_icon_size_install(const struct native_api *api, const ld_lib
         }
     }
     g_dock_icon_scale_installed = ok;
-    ld_blog("dock_icon_size: installed %d hooks (item=%zu dock_sc=%zu ws_sc=%zu info=0x%x cont=0x%x)",
-            ok, item_idx, sc_idx, ws_idx, g_sc_ctrl_info_off, g_sc_info_container_off);
+    ld_blog("dock_icon_size: installed %d hooks (item=%zu dock_sc=%zu ws_sc=%zu info=[0x%x,0x%x,0x%x,0x%x] cont=0x%x)",
+            ok, item_idx, sc_idx, ws_idx,
+            g_ws_sc_info_off[0], g_ws_sc_info_off[1], g_ws_sc_info_off[2], g_ws_sc_info_off[3],
+            g_ws_sc_cont_off[0]);
 }
 
 #endif /* LD_DOCK_ICON_SIZE_H */

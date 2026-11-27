@@ -171,21 +171,47 @@ __attribute__((used,naked)) static void repl_os4_ws_fast_blur(void)
     );
 }
 
-/* FolderClingBlurController._setFolderClingBlur takes progress (0..1) in d0. */
+__attribute__((used)) static double ld_folder_blur_pre(uintptr_t ctrl, uintptr_t null_obj,
+                                                   uintptr_t x28, double prog)
+{
+    uint32_t pct = __atomic_load_n(&g_os4_folder_blur_percent, __ATOMIC_ACQUIRE);
+    if ((ctrl & 1u) && (uint32_t)ctrl != (uint32_t)null_obj && ctrl >= 0x100000u) {
+        uint32_t rx_w = 0;
+        if (ld_read_heap(ctrl + 0x2fu, &rx_w, sizeof rx_w) &&
+            (rx_w & 1u) && rx_w != (uint32_t)null_obj) {
+            uintptr_t rx = (uintptr_t)rx_w + (x28 << 32);
+            uint32_t val_w = 0;
+            if (!ld_dart_is_ro_addr(rx) &&
+                ld_read_heap(rx + 0x13u, &val_w, sizeof val_w) &&
+                val_w == (uint32_t)(null_obj + 0x20u)) {
+                /* Force FolderClingBlurWidget to use the normal blur mode (+0x13 = 1)
+                 * instead of the darkened laptop-AllApps fallback (+0x13 = 0). */
+                uint32_t dart_false = (uint32_t)(null_obj + 0x30u);
+                memcpy((void *)(rx + 0x13u), &dart_false, sizeof dart_false);
+                static unsigned logs;
+                if (logs++ < 6u) {
+                    ld_blog("folder_blur_pre: cleared inLaptopAllApps on ctrl=0x%lx", (unsigned long)ctrl);
+                }
+            }
+        }
+    }
+    return (pct < 100u) ? prog * ((double)pct / 100.0) : prog;
+}
+
 __attribute__((used,naked)) static void repl_os4_folder_blur_radius(void)
 {
     __asm__ volatile(
-        "adrp x9, g_os4_folder_blur_percent\n"
-        "add x9, x9, :lo12:g_os4_folder_blur_percent\n"
-        "ldar w9, [x9]\n"
-        "cmp w9, #100\n"
-        "b.hs 1f\n"
-        "ucvtf d1, w9\n"
-        "mov w10, #100\n"
-        "ucvtf d2, w10\n"
-        "fdiv d1, d1, d2\n"
-        "fmul d0, d0, d1\n"
-        "1: adrp x16, g_orig_folder_blur_radius\n"
+        "stp x29, x30, [sp, #-0x30]!\n"
+        "stp x0, x1, [sp, #0x10]\n"
+        "stp x2, x15, [sp, #0x20]\n"
+        "mov x0, x1\n"
+        "mov x1, x22\n"
+        "mov x2, x28\n"
+        "bl ld_folder_blur_pre\n"
+        "ldp x2, x15, [sp, #0x20]\n"
+        "ldp x0, x1, [sp, #0x10]\n"
+        "ldp x29, x30, [sp], #0x30\n"
+        "adrp x16, g_orig_folder_blur_radius\n"
         "add x16, x16, :lo12:g_orig_folder_blur_radius\n"
         "ldr x16, [x16]\n"
         "br x16\n"

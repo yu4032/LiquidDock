@@ -581,6 +581,43 @@ __attribute__((used)) static void ld_fls_post_cal_item_size(struct ld_ws_ctx *c)
     ld_fls_record_cid(cid, span_x, span_y, title_h);
     uint64_t null_obj = 0;
     if (c->x[27]) ld_read_heap((uintptr_t)c->x[27] + 64u, &null_obj, sizeof null_obj);
+    if (span_x == 1 && span_y == 1) {
+        double ws_ratio = ld_ws_icon_ratio(NULL);
+        if (ws_ratio != 1.0) {
+            uint32_t hot_w = 0;
+            int in_hotseat = ld_read_heap(strat + 0x43u, &hot_w, sizeof hot_w) &&
+                             (hot_w & 1u) && (uint32_t)hot_w != (uint32_t)null_obj &&
+                             ((hot_w & 0x10u) == 0u);
+            if (!in_hotseat) {
+                double nfw = fw * ws_ratio;
+                double nfh = fh * ws_ratio;
+                if (isfinite(nfw) && isfinite(nfh) && nfw >= 10.0 && nfw <= 400.0 && nfh >= 10.0 && nfh <= 400.0) {
+                    double nph = ph - 0.5 * (nfw - fw);
+                    double npv = pv - 0.5 * (nfh - fh);
+                    if (isfinite(nph) && isfinite(npv)) {
+                        memcpy((void *)(strat + g_fls_fw_off), &nfw, sizeof nfw);
+                        memcpy((void *)(strat + g_fls_fh_off), &nfh, sizeof nfh);
+                        memcpy((void *)(strat + g_fls_ph_off), &nph, sizeof nph);
+                        memcpy((void *)(strat + g_fls_pv_off), &npv, sizeof npv);
+                        fw = nfw;
+                        fh = nfh;
+                        ph = nph;
+                        pv = npv;
+                    }
+                }
+                double pw = 0.0, ph_box = 0.0;
+                if (ld_read_heap(strat + 0x27u, &pw, sizeof pw) &&
+                    ld_read_heap(strat + 0x1fu, &ph_box, sizeof ph_box) &&
+                    isfinite(pw) && isfinite(ph_box) &&
+                    pw >= 10.0 && pw <= 400.0 && ph_box >= 10.0 && ph_box <= 400.0) {
+                    double npw = pw * ws_ratio;
+                    double nph_box = ph_box * ws_ratio;
+                    memcpy((void *)(strat + 0x27u), &npw, sizeof npw);
+                    memcpy((void *)(strat + 0x1fu), &nph_box, sizeof nph_box);
+                }
+            }
+        }
+    }
     ld_fls_sync_ten_icon_inset(strat, c->x[28], (uint32_t)null_obj,
                                cid, span_x, span_y, fw, fh, ph, pv, 1);
 }

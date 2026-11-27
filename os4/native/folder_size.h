@@ -38,8 +38,11 @@ static void ld_align_size_spec(struct ld_dart_context *c, void *original,
     int64_t span = vertical ? span_y : span_x;
     uintptr_t icon_record = ld_heap_pointer(c, grid, 0x6b);
     if (!icon_record || !ld_read_heap(icon_record + 0x17, &icon, sizeof icon)
-            || !ld_read_heap(fp - (vertical ? 0x30 : 0x38), &pitch, sizeof pitch)
-            || !ld_icon_aligned_extent(span, pitch, icon, &extent)) return;
+            || !ld_read_heap(fp - (vertical ? 0x30 : 0x38), &pitch, sizeof pitch)) return;
+    double ws_ratio = ld_ws_icon_ratio(NULL);
+    if (ws_ratio != 1.0) icon *= ws_ratio;
+    if (!ld_icon_aligned_extent(span, pitch, icon, &extent)) return;
+    ld_gse_record_large_folder_dim((int)span_x, (int)span_y, vertical, (float)extent);
 
     if (percent) {
         // Original code evaluates (span - percentage) * pitch. Keep the

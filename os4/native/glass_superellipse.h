@@ -96,6 +96,59 @@ static volatile float g_ld_gse_widget_corner;
 static __thread int g_ld_gse_tls_is_small_icon;
 static __thread int g_ld_gse_tls_is_dock;
 static __thread int g_ld_gse_tls_is_widget;
+static __thread int g_ld_gse_tls_is_large_folder;
+
+/* Observed large-folder (span_x, span_y) -> (w, h) in dp, populated by folder_size.h.
+ * Used to distinguish large folders (2x1, 1x2, 2x2, 4x2, ...) from widgets when
+ * widget_corner happens to equal a large folder's native corner radius (e.g. 24dp). */
+#define LD_GSE_LF_DIM_SLOTS 8
+struct ld_gse_lf_dim {
+    int span_x;
+    int span_y;
+    float w;
+    float h;
+};
+static struct ld_gse_lf_dim g_ld_gse_lf_dims[LD_GSE_LF_DIM_SLOTS];
+static volatile int g_ld_gse_lf_dim_count;
+
+static inline void ld_gse_record_large_folder_dim(int span_x, int span_y, int vertical, float extent)
+{
+    if (span_x < 1 || span_y < 1 || (span_x == 1 && span_y == 1) ||
+        !(extent > 10.0f && extent < 1000.0f)) {
+        return;
+    }
+    int n = __atomic_load_n(&g_ld_gse_lf_dim_count, __ATOMIC_ACQUIRE);
+    if (n > LD_GSE_LF_DIM_SLOTS) n = LD_GSE_LF_DIM_SLOTS;
+    for (int i = 0; i < n; i++) {
+        if (g_ld_gse_lf_dims[i].span_x == span_x && g_ld_gse_lf_dims[i].span_y == span_y) {
+            if (vertical) g_ld_gse_lf_dims[i].h = extent;
+            else g_ld_gse_lf_dims[i].w = extent;
+            return;
+        }
+    }
+    if (n < LD_GSE_LF_DIM_SLOTS) {
+        g_ld_gse_lf_dims[n].span_x = span_x;
+        g_ld_gse_lf_dims[n].span_y = span_y;
+        g_ld_gse_lf_dims[n].w = vertical ? 0.0f : extent;
+        g_ld_gse_lf_dims[n].h = vertical ? extent : 0.0f;
+        __atomic_store_n(&g_ld_gse_lf_dim_count, n + 1, __ATOMIC_RELEASE);
+    }
+}
+
+static inline int ld_gse_matches_recorded_large_folder(float w, float h)
+{
+    int n = __atomic_load_n(&g_ld_gse_lf_dim_count, __ATOMIC_ACQUIRE);
+    if (n > LD_GSE_LF_DIM_SLOTS) n = LD_GSE_LF_DIM_SLOTS;
+    for (int i = 0; i < n; i++) {
+        float fw = g_ld_gse_lf_dims[i].w;
+        float fh = g_ld_gse_lf_dims[i].h;
+        if (fw > 10.0f && fh > 10.0f &&
+            fabsf(w - fw) < 4.5f && fabsf(h - fh) < 4.5f) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 struct ld_gse_cache_entry {
     float w, h, rx, ry, n;
@@ -147,8 +200,10 @@ static int ld_gse_rect_is_dock(const float *rect, float *w_out, float *h_out)
     int is_local_item_layer = (l >= 4.0f && l < 64.0f && fabsf(l - t) < 1.5f);
     if (is_local_item_layer) return 0;
     int bar1 = w1 > 600.0f && h1 < 320.0f;
-    /* 平板浮动 Dock：实测 226x78 / 276.6x75.9（逻辑像素），短边 >= 65 且宽 >= 210。 */
-    int bar3 = h1 >= 65.0f && h1 <= 140.0f && w1 >= 210.0f && w1 <= 1600.0f;
+    /* 平板浮动 Dock：实测 226x78 / 276.6x75.9（逻辑像素），短边 >= 65 且宽 >= 210；
+     * 排除靠近局部原点的 2x1/3x1 大文件夹（含外扩时宽约 195~240）。 */
+    int bar3 = h1 >= 65.0f && h1 <= 140.0f && w1 >= 210.0f && w1 <= 1600.0f &&
+               !(l < 64.0f && t < 64.0f && w1 < 260.0f);
     return bar1 || bar3;
 }
 
@@ -167,7 +222,7 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     float rad[2] = {0, 0};
     float quad[4] = {0, 0, 0, 0};
     float n_old = -1.0f;
-    int dock = 0, patched = 0, matched_widget = 0;
+    int dock = 0, patched = 0, matched_widget = 0, matched_large_folder = 0;
     float w = 0, h = 0;
 
     if (canvas) {
@@ -225,16 +280,20 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
             /* 按原始圆角区分小组件（<=15.2dp，原生 14dp，含堆叠小组件滚动切换时的非零原点）
              * 与大文件夹（>15.2dp，原生 16.7dp+，含 2x2/1x2/2x1/3x1 及长按拖动浮层）。
              * 大文件夹再按短边区分：2x1/1x2/3x1 窄条（min_dim < 120dp）与 2x2 及以上（>= 120dp）。 */
-            /* 保留原生圆形/胶囊小组件（如放大到 2x2 的圆形时钟小组件），不覆盖其圆角。 */
-            int is_circular = (rad[0] >= min_dim * 0.45f || rad[1] >= min_dim * 0.45f);
-            int is_2x2_folder_size = (fabsf(w - h) < 4.0f && fabsf(w - 169.7f) < 12.0f);
+            /* 保留原生圆形小组件（如 2x2 圆形时钟，接近正方形且圆角 >= 0.45*min_dim），
+             * 不误拦 2x1/1x2 等细长条形大文件夹（长宽比 > 1.35）。 */
+            int is_circular = (max_dim <= min_dim * 1.35f) &&
+                              (rad[0] >= min_dim * 0.45f || rad[1] >= min_dim * 0.45f);
+            int is_known_folder_size = ld_gse_matches_recorded_large_folder(w, h) ||
+                                       (fabsf(w - h) < 4.0f && fabsf(w - 169.7f) < 12.0f);
             int is_widget = !dock && !is_circular && min_dim >= 68.0f && max_dim >= 115.0f && max_dim <= 800.0f &&
                             (max_dim / fmaxf(min_dim, 1.0f)) <= 3.2f &&
-                            (rad[0] <= 15.2f || (wg_c > 0.0f && fabsf(rad[0] - wg_c) < 0.5f && !is_2x2_folder_size));
+                            (rad[0] <= 15.2f || (wg_c > 0.0f && fabsf(rad[0] - wg_c) < 0.5f && !is_known_folder_size));
             matched_widget = is_widget;
             int is_large_folder = !dock && !is_circular && !is_widget && min_dim >= 45.0f && max_dim >= 120.0f &&
                                   max_dim <= 800.0f && (max_dim / fmaxf(min_dim, 1.0f)) <= 4.0f &&
                                   rad[0] > 15.2f;
+            matched_large_folder = is_large_folder;
             float eff_lf_c = (min_dim < 120.0f && lf_2x1_c > 0.0f) ? lf_2x1_c : lf_c;
             if (is_large_folder && eff_lf_c > 0.0f) {
                 float r_lf = fminf(eff_lf_c, min_dim * 0.5f);
@@ -288,10 +347,12 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     int prev_small_icon = g_ld_gse_tls_is_small_icon;
     int prev_dock = g_ld_gse_tls_is_dock;
     int prev_widget = g_ld_gse_tls_is_widget;
+    int prev_large_folder = g_ld_gse_tls_is_large_folder;
     float max_d = fmaxf(w, h);
     g_ld_gse_tls_is_small_icon = (rec != NULL && !dock && max_d > 1.0f && max_d < 115.0f);
     g_ld_gse_tls_is_dock = (rec != NULL && dock);
     g_ld_gse_tls_is_widget = matched_widget;
+    g_ld_gse_tls_is_large_folder = matched_large_folder;
 
     void *ret = NULL;
     if (g_ld_gse_orig_dhm)
@@ -300,6 +361,7 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     g_ld_gse_tls_is_small_icon = prev_small_icon;
     g_ld_gse_tls_is_dock = prev_dock;
     g_ld_gse_tls_is_widget = prev_widget;
+    g_ld_gse_tls_is_large_folder = prev_large_folder;
     (void)patched;
     return ret;
 }

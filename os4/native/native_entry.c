@@ -51,6 +51,7 @@ static volatile int g_diag_logging; /* settings log switch for optional diagnost
 static volatile int g_grid_rows;
 static volatile int g_count_cols,g_count_rows;
 static struct ld_grid_conf g_home_options;
+static double ld_ws_icon_ratio(int *out_pct);
 #include "divider_paint.h"
 static volatile unsigned g_pad_trace[5] __attribute__((used));
 static volatile uintptr_t g_pad_pool __attribute__((used));

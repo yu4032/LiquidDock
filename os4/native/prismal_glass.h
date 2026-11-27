@@ -569,20 +569,32 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     float max_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fmaxf(eff_gx, eff_gy) : 100.0f;
     int is_dock = 0;
     int is_widget_tls = 0;
+    int is_large_folder_tls = 0;
 #ifdef LD_GLASS_SUPERELLIPSE_H
     is_dock = g_ld_gse_tls_is_dock;
     is_widget_tls = g_ld_gse_tls_is_widget;
+    is_large_folder_tls = g_ld_gse_tls_is_large_folder;
 #endif
-    /* Preserve stock full-circle / capsule widgets (e.g. 2x2 circular clock widget) and Dock. */
-    int is_circular = (gz >= min_glass_dim * 0.45f);
+    /* Preserve stock full-circle widgets (e.g. 2x2 circular clock widget) and Dock,
+     * while allowing elongated 2x1/1x2 large folders (aspect > 1.35). */
+    int is_circular = (max_glass_dim <= min_glass_dim * 1.35f) &&
+                      (gz >= min_glass_dim * 0.45f);
     if (!is_circular && !is_dock) {
-    if (is_widget_tls) {
+    if (is_large_folder_tls) {
+        double clf = (min_glass_dim < 120.0f * d && opt->large_folder_2x1_corner > 0.0)
+            ? opt->large_folder_2x1_corner : opt->large_folder_corner;
+        if (clf > 0.0) {
+            float cr_px = fminf((float)clf * d, min_glass_dim * 0.5f);
+            ld_write_f32(ubo, 0x18u, cr_px);
+        }
+    } else if (is_widget_tls) {
         if (opt->widget_corner > 0.0) {
             float cr_px = fminf((float)opt->widget_corner * d, min_glass_dim * 0.5f);
             ld_write_f32(ubo, 0x18u, cr_px);
         }
     } else if (min_glass_dim >= 360.0f && max_glass_dim <= 2000.0f && (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f) {
-        int is_2x2_folder_size = (fabsf(eff_gx - eff_gy) < 12.0f && fabsf(eff_gx - 169.7f * d) < 22.0f * d);
+        int is_2x2_folder_size = ld_gse_matches_recorded_large_folder(eff_gx / d, eff_gy / d) ||
+                                 (fabsf(eff_gx - eff_gy) < 12.0f && fabsf(eff_gx - 169.7f * d) < 22.0f * d);
         int is_pre_overridden_widget = (opt->widget_corner > 0.0 && !is_2x2_folder_size &&
                                         fabsf(gz - (float)opt->widget_corner * d) < 1.5f * d);
         int is_large_folder = !is_pre_overridden_widget &&
