@@ -73,6 +73,9 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
                 "禁用桌面原生在玻璃静止时的采样降级与下采样，保持完整采样分辨率；实时生效"),
             toggle(ConfigSchema.Glass.MOTION_DOWNSAMPLE, "滚动与动画时简化玻璃着色",
                 "开启后在桌面滑动、打开文件夹等动画期间临时简化焦散等高开销着色以提升流畅度；关闭后动画期间保持完整着色；实时生效"),
+            SettingsBlock.Header("sampling.debug", "调试显示"),
+            toggle(ConfigSchema.Glass.PRISMAL_SHOW_NORMALS, "OS4 法线与方向光可视化",
+                "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理"),
         ), glass)
     numbers(Page.DockGeometry, "调整 Dock 的尺寸、位置、圆角与图标间距。", dockSpecs, dock)
     listOf(Page.GridLandscape to "landscape", Page.GridPortrait to "portrait").forEach { (p, orientation) ->
