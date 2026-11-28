@@ -113,10 +113,11 @@ internal fun SoftGlassComponentsPage(
     searchFocus: SettingsFocusRequest? = null,
 ) {
     val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
-    val liquidEnabled = prefs.getBoolean(
+    val useLiquidGlass = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
-    ) || prefs.getBoolean(
+    )
+    val liquidEnabled = useLiquidGlass || prefs.getBoolean(
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
@@ -325,10 +326,11 @@ internal fun GlassIconsPage(
     searchFocus: SettingsFocusRequest? = null,
 ) {
     val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
-    val liquidEnabled = prefs.getBoolean(
+    val useLiquidGlass = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
-    ) || prefs.getBoolean(
+    )
+    val liquidEnabled = useLiquidGlass || prefs.getBoolean(
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
@@ -413,6 +415,14 @@ internal fun GlassIconsPage(
         item(key = "icons-glass-edge") {
             SettingsCard {
                 ArrowPreference(
+                    title = "图标玻璃参数",
+                    summary = if (useLiquidGlass) "独立调节桌面图标液态玻璃材质（模糊、底色、折射、光照与阴影）；未设置参数继承全局"
+                    else "独立调节桌面图标柔光玻璃材质",
+                    enabled = masterEnabled && liquidEnabled && iconGlass,
+                    onClick = { open(if (useLiquidGlass) Page.IconGlassAll else Page.SoftGlassIcons) },
+                )
+                ModernListDivider()
+                ArrowPreference(
                     title = "阴影",
                     summary = if (os4Launcher) "独立开关图标折射描边与外阴影（数值参数继承全局）"
                     else "独立设置 Prismal 外阴影与边缘描边",
@@ -433,10 +443,11 @@ internal fun GlassWidgetsPage(
     searchFocus: SettingsFocusRequest? = null,
 ) {
     val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
-    val liquidEnabled = prefs.getBoolean(
+    val useLiquidGlass = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
-    ) || prefs.getBoolean(
+    )
+    val liquidEnabled = useLiquidGlass || prefs.getBoolean(
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
@@ -504,6 +515,14 @@ internal fun GlassWidgetsPage(
         item(key = "widget-related-heading") { SmallTitle("独立外观与组件管理") }
         item(key = "widget-components") {
             SettingsCard {
+                ArrowPreference(
+                    title = "小部件玻璃参数",
+                    summary = if (useLiquidGlass) "独立调节小组件液态玻璃材质（模糊、底色、折射、光照与阴影）；未设置参数继承全局"
+                    else "独立调节小组件柔光玻璃材质",
+                    enabled = masterEnabled && liquidEnabled && widgetGlass,
+                    onClick = { open(if (useLiquidGlass) Page.WidgetGlassAll else Page.SoftGlassWidgets) },
+                )
+                ModernListDivider()
                 ArrowPreference(
                     title = stringResource(R.string.widget_components_entry),
                     summary = stringResource(R.string.widget_components_entry_summary),
@@ -617,11 +636,11 @@ internal fun GlassFoldersPage(
                 ModernListDivider()
                 top.yukonga.miuix.kmp.basic.BasicComponent(
                     title = "大文件夹玻璃参数",
-                    summary = if (useLiquidGlass) "当前跟随液态玻璃全局参数；点击前往调节"
-                    else "当前跟随柔光玻璃全局参数；点击前往调节",
+                    summary = if (useLiquidGlass) "独立调节大文件夹液态玻璃材质（模糊、底色、折射、光照与阴影）；未设置参数继承全局"
+                    else "独立调节大文件夹柔光玻璃材质",
                     enabled = masterEnabled && liquidEnabled && (os4Launcher || largeFolderGlass),
                     insideMargin = ModernPreferenceMargin,
-                    onClick = { open(if (useLiquidGlass) Page.Liquid else Page.SoftGlass) },
+                    onClick = { open(if (useLiquidGlass) Page.LargeFolderGlassAll else Page.SoftGlassLargeFolder) },
                 )
             }
         }
@@ -673,10 +692,11 @@ internal fun LauncherHighlightTogglePage(
     masterEnabled: Boolean,
     compact: Boolean,
 ) {
-    val liquidEnabled = prefs.getBoolean(
+    val useLiquidGlass = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
-    ) || prefs.getBoolean(
+    )
+    val liquidEnabled = useLiquidGlass || prefs.getBoolean(
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )

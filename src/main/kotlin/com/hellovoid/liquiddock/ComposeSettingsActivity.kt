@@ -473,6 +473,26 @@ private fun LiquidDockSettings(
                     )
 
                     Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
+                    Page.DockGlassAll -> ScopedGlassSettingsPage(
+                        padding, prefs, masterEnabled, ScopedGlassOptics.DOCK, "Dock 栏",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.DockGlassAll.name }
+                            ?.let { SettingsFocusRequest(Page.DockGlassAll, it, searchFocusSequence) },
+                    )
+                    Page.IconGlassAll -> ScopedGlassSettingsPage(
+                        padding, prefs, masterEnabled, ScopedGlassOptics.ICON, "桌面图标",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.IconGlassAll.name }
+                            ?.let { SettingsFocusRequest(Page.IconGlassAll, it, searchFocusSequence) },
+                    )
+                    Page.WidgetGlassAll -> ScopedGlassSettingsPage(
+                        padding, prefs, masterEnabled, ScopedGlassOptics.WIDGET, "小部件",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.WidgetGlassAll.name }
+                            ?.let { SettingsFocusRequest(Page.WidgetGlassAll, it, searchFocusSequence) },
+                    )
+                    Page.LargeFolderGlassAll -> ScopedGlassSettingsPage(
+                        padding, prefs, masterEnabled, ScopedGlassOptics.LARGE_FOLDER, "大文件夹",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.LargeFolderGlassAll.name }
+                            ?.let { SettingsFocusRequest(Page.LargeFolderGlassAll, it, searchFocusSequence) },
+                    )
                     Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo,
                         searchFocusKey?.takeIf { searchFocusPage == Page.GlassIcons.name }
                             ?.let { SettingsFocusRequest(Page.GlassIcons, it, searchFocusSequence) })

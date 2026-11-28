@@ -46,8 +46,18 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
     }
     if (vt != expect) return;
     int prismal_active = __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE);
-    if (!prismal_active && g_home_options.soft_glass_enabled && g_home_options.native_glass.mask) {
-        ld_native_glass_apply((uintptr_t)obj, &g_home_options.native_glass, ld_glass_fast_read, ld_glass_fast_write);
+    int scope = LD_GLASS_SCOPE_GLOBAL;
+#ifdef LD_GLASS_SUPERELLIPSE_H
+    scope = ld_prismal_scope_for_kind(g_ld_gse_tls_kind);
+#endif
+    if (!prismal_active && g_home_options.soft_glass_enabled) {
+        if (g_home_options.native_glass.mask) {
+            ld_native_glass_apply((uintptr_t)obj, &g_home_options.native_glass, ld_glass_fast_read, ld_glass_fast_write);
+        }
+        if (scope > LD_GLASS_SCOPE_GLOBAL && scope < LD_GLASS_SCOPE_COUNT &&
+            g_home_options.scoped_glass[scope].mask) {
+            ld_native_glass_apply((uintptr_t)obj, &g_home_options.scoped_glass[scope], ld_glass_fast_read, ld_glass_fast_write);
+        }
     }
     if (g_home_options.prismal.disable_stationary_downsample ||
         __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED)) {
@@ -74,7 +84,7 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
     }
     if (__atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE)) {
         uint8_t *base = (uint8_t *)obj;
-        float blur_px = ld_prismal_current_blur_px();
+        float blur_px = ld_prismal_current_blur_px_for_scope(scope);
         float br = blur_px >= 0.5f ? blur_px : 0.01f;
         float bg = 0.01f; /* always triggers MakeBaseBlurImage sharp bypass for +0x148 */
         static const unsigned zero_idx[] = { 24, 28, 30, 31, 32, 33 }; /* darker, bg_brightness, brightness, inner_white, inner_mix, luminance_amount */

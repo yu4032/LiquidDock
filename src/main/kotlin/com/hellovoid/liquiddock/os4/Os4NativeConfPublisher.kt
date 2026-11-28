@@ -106,6 +106,20 @@ object Os4NativeConfPublisher {
                     }
                 }
             }
+            if (options.glassEnabled && options.prismalScopeOverrides.isNotEmpty()) {
+                for ((scope, scopeMap) in options.prismalScopeOverrides) {
+                    for (spec in Os4MainScreenOptions.prismalSpecs) {
+                        val v = scopeMap[spec.confKey] ?: continue
+                        val suffix = spec.confKey.removePrefix("prismal_")
+                        append("prismal_scope_").append(scope).append('_').append(suffix).append('=')
+                        if (spec.isBool) {
+                            append(if (v >= 0.5) 1 else 0).append('\n')
+                        } else {
+                            append(Os4NativeGlassOptions.format(v)).append('\n')
+                        }
+                    }
+                }
+            }
             if (options.softGlassEnabled && !options.glassEnabled) {
                 Os4NativeGlassOptions.configLines(options.glassNativeOverrides)!!.forEach {
                     append(it).append('\n')

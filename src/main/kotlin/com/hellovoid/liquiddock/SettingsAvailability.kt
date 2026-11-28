@@ -58,6 +58,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
             Page.WidgetComponents,
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
+            Page.DockGlassAll, Page.IconGlassAll, Page.WidgetGlassAll, Page.LargeFolderGlassAll,
             Page.IconEdge,
             Page.Recents,
             Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,

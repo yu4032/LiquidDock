@@ -75,6 +75,10 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         }
     }
     val scope = when (page) {
+        Page.DockGlassAll -> ScopedGlassOptics.DOCK
+        Page.IconGlassAll -> ScopedGlassOptics.ICON
+        Page.WidgetGlassAll -> ScopedGlassOptics.WIDGET
+        Page.LargeFolderGlassAll -> ScopedGlassOptics.LARGE_FOLDER
         Page.HandleMenuAll -> ScopedGlassOptics.HANDLE_MENU
         Page.ShortcutPopupAll -> ScopedGlassOptics.POPUP
         Page.DialogAll -> ScopedGlassOptics.DIALOG

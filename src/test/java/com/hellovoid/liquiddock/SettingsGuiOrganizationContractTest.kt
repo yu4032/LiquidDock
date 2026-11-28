@@ -26,6 +26,7 @@ class SettingsGuiOrganizationContractTest {
         Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
         Page.Liquid, Page.SidebarEdge,
         Page.GlassComponents, Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
+        Page.DockGlassAll, Page.IconGlassAll, Page.WidgetGlassAll, Page.LargeFolderGlassAll,
         Page.HandleMenuCustomization, Page.HandleMenuAll,
         Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
         Page.DialogCustomization, Page.DialogAll,
@@ -49,6 +50,7 @@ class SettingsGuiOrganizationContractTest {
     @Test fun allStaticCustomGlassRowsAreIndexedWithoutPhantomPreferences() {
         val customSearchPages = setOf(
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
+            Page.DockGlassAll, Page.IconGlassAll, Page.WidgetGlassAll, Page.LargeFolderGlassAll,
             Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll,
             Page.HandleMenuCustomization, Page.ShortcutPopupCustomization,
             Page.DialogCustomization, Page.Gboard, Page.IconSize, Page.GridBasics,
@@ -64,6 +66,7 @@ class SettingsGuiOrganizationContractTest {
             rows.forEach { row ->
                 val ownerExists = when (page) {
                     Page.GlassFolders -> folderGlassFocusCell.containsKey(row.key)
+                    Page.DockGlassAll, Page.IconGlassAll, Page.WidgetGlassAll, Page.LargeFolderGlassAll,
                     Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll ->
                         row.key in customGlassSearchRows(page).map { it.key }
                     else -> customDenseFocusIndex(page, row.key) != null

@@ -114,6 +114,7 @@
     <string name="page_dock_geometry">Dock geometry</string>
     <string name="page_glass_components">Liquid glass components</string>
     <string name="page_glass_icons">Icons &amp; controls</string>
+    <string name="page_dock_glass">Dock Glass Material</string>
     <string name="page_glass_widgets">Widgets</string>
     <string name="page_glass_folders">Folders</string>
     <string name="page_glass_menus">Menus &amp; popups</string>

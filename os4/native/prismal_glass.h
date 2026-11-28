@@ -163,10 +163,13 @@ static uint64_t g_prismal_vk_device;
 static pthread_mutex_t g_prismal_conf_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct ld_prismal_options g_prismal_live_opts;
 static struct ld_prismal_options g_prismal_opts_slots[2];
+static struct ld_prismal_options g_prismal_scope_slots[2][LD_GLASS_SCOPE_COUNT];
 static volatile unsigned g_prismal_opts_slot;
 static volatile uint32_t g_prismal_blur_px_bits;
+static volatile uint32_t g_prismal_scope_blur_px_bits[LD_GLASS_SCOPE_COUNT];
 static volatile int g_prismal_in_motion __attribute__((used));
 static int g_prismal_opts_initialized;
+static __thread int g_tls_render_scope;
 
 static void ld_prismal_fade_begin_frame(int64_t now_ns, int64_t dt_ns);
 
@@ -396,32 +399,56 @@ static float ld_prismal_get_density(void)
     return d;
 }
 
-static void ld_prismal_publish_opts_locked(const struct ld_prismal_options *src)
+static void ld_prismal_publish_opts_locked(const struct ld_prismal_options *src,
+                                           const struct ld_prismal_options *scopes)
 {
     g_prismal_live_opts = *src;
     unsigned next = (__atomic_load_n(&g_prismal_opts_slot, __ATOMIC_RELAXED) ^ 1u) & 1u;
     g_prismal_opts_slots[next] = *src;
+    float d = ld_prismal_get_density();
+    for (int s = 0; s < LD_GLASS_SCOPE_COUNT; ++s) {
+        g_prismal_scope_slots[next][s] = (scopes != NULL) ? scopes[s] : *src;
+        float sb = fmaxf(0.0f, (float)g_prismal_scope_slots[next][s].blur * d);
+        uint32_t sbits = 0;
+        memcpy(&sbits, &sb, sizeof sbits);
+        __atomic_store_n(&g_prismal_scope_blur_px_bits[s], sbits, __ATOMIC_RELEASE);
+    }
     __atomic_store_n(&g_prismal_opts_slot, next, __ATOMIC_RELEASE);
-    float blur_px = fmaxf(0.0f, (float)src->blur * ld_prismal_get_density());
+    float blur_px = fmaxf(0.0f, (float)src->blur * d);
     uint32_t bits = 0;
     memcpy(&bits, &blur_px, sizeof bits);
     __atomic_store_n(&g_prismal_blur_px_bits, bits, __ATOMIC_RELEASE);
     __atomic_store_n(&g_prismal_opts_initialized, 1, __ATOMIC_RELEASE);
 }
 
-static const struct ld_prismal_options *ld_prismal_read_opts(void)
+static inline void ld_prismal_publish_scoped_opts(const struct ld_prismal_options *global,
+                                                  const struct ld_prismal_options *scopes)
+{
+    if (!global) return;
+    pthread_mutex_lock(&g_prismal_conf_lock);
+    ld_prismal_publish_opts_locked(global, scopes);
+    pthread_mutex_unlock(&g_prismal_conf_lock);
+}
+
+static const struct ld_prismal_options *ld_prismal_read_scope_opts(int scope)
 {
     if (!__atomic_load_n(&g_prismal_opts_initialized, __ATOMIC_ACQUIRE)) {
         pthread_mutex_lock(&g_prismal_conf_lock);
         if (!g_prismal_opts_initialized) {
             struct ld_prismal_options def;
             ld_prismal_options_defaults(&def);
-            ld_prismal_publish_opts_locked(&def);
+            ld_prismal_publish_opts_locked(&def, NULL);
         }
         pthread_mutex_unlock(&g_prismal_conf_lock);
     }
+    if (scope < 0 || scope >= LD_GLASS_SCOPE_COUNT) scope = LD_GLASS_SCOPE_GLOBAL;
     unsigned slot = __atomic_load_n(&g_prismal_opts_slot, __ATOMIC_ACQUIRE) & 1u;
-    return &g_prismal_opts_slots[slot];
+    return &g_prismal_scope_slots[slot][scope];
+}
+
+static inline const struct ld_prismal_options *ld_prismal_read_opts(void)
+{
+    return ld_prismal_read_scope_opts(LD_GLASS_SCOPE_GLOBAL);
 }
 
 static void ld_prismal_maybe_reload(void)
@@ -457,7 +484,7 @@ static void ld_prismal_maybe_reload(void)
         struct ld_grid_conf conf;
         if (ld_grid_conf_parse_file(path, &conf)) {
             pthread_mutex_lock(&g_prismal_conf_lock);
-            ld_prismal_publish_opts_locked(&conf.prismal);
+            ld_prismal_publish_opts_locked(&conf.prismal, conf.prismal_scopes);
             pthread_mutex_unlock(&g_prismal_conf_lock);
             __atomic_store_n(&g_prismal_no_downsample,
                              conf.prismal.disable_stationary_downsample ? 1 : 0,
@@ -502,13 +529,39 @@ static void ld_prismal_maybe_reload(void)
     pthread_mutex_unlock(&reload_lock);
 }
 
-static inline float ld_prismal_current_blur_px(void)
+static inline float ld_prismal_current_blur_px_for_scope(int scope)
 {
-    uint32_t bits = __atomic_load_n(&g_prismal_blur_px_bits, __ATOMIC_RELAXED);
+    if (scope < 0 || scope >= LD_GLASS_SCOPE_COUNT) scope = LD_GLASS_SCOPE_GLOBAL;
+    uint32_t bits = __atomic_load_n(&g_prismal_scope_blur_px_bits[scope], __ATOMIC_RELAXED);
     float v = 0.0f;
     memcpy(&v, &bits, sizeof v);
     return v;
 }
+
+static inline float ld_prismal_current_blur_px(void)
+{
+    return ld_prismal_current_blur_px_for_scope(LD_GLASS_SCOPE_GLOBAL);
+}
+
+#ifdef LD_GLASS_SUPERELLIPSE_H
+static inline int ld_prismal_scope_for_kind(enum ld_glass_kind kind)
+{
+    switch (kind) {
+    case LD_GLASS_KIND_DOCK:
+        return LD_GLASS_SCOPE_DOCK;
+    case LD_GLASS_KIND_SMALL_ICON:
+        return LD_GLASS_SCOPE_ICON;
+    case LD_GLASS_KIND_LARGE_FOLDER:
+    case LD_GLASS_KIND_LARGE_FOLDER_2X1:
+        return LD_GLASS_SCOPE_LARGE_FOLDER;
+    case LD_GLASS_KIND_WIDGET:
+    case LD_GLASS_KIND_CIRCULAR:
+        return LD_GLASS_SCOPE_WIDGET;
+    default:
+        return LD_GLASS_SCOPE_GLOBAL;
+    }
+}
+#endif
 
 static inline void ld_sp_add_shared(uint8_t *ctrl)
 {
@@ -567,14 +620,12 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     float eff_gy = fmaxf(gy - 2.0f * pad_px, 2.0f);
     float min_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fminf(eff_gx, eff_gy) : 100.0f;
     float max_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fmaxf(eff_gx, eff_gy) : 100.0f;
-    enum ld_glass_kind kind = LD_GLASS_KIND_NONE;
 #ifdef LD_GLASS_SUPERELLIPSE_H
-    kind = g_ld_gse_tls_kind;
+    enum ld_glass_kind kind = g_ld_gse_tls_kind;
     if (kind == LD_GLASS_KIND_NONE) {
         kind = ld_gse_classify_rect(eff_gx / d, eff_gy / d, gz / d, gz / d, 0,
                                     (float)opt->widget_corner);
     }
-#endif
     double target_corner_dp = 0.0;
     switch (kind) {
     case LD_GLASS_KIND_LARGE_FOLDER_2X1:
@@ -599,6 +650,10 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
         float cr_px = fminf((float)target_corner_dp * d, min_glass_dim * 0.5f);
         ld_write_f32(ubo, 0x18u, cr_px);
     }
+#else
+    (void)min_glass_dim;
+    (void)max_glass_dim;
+#endif
     (void)gz;
 
     float ior = ld_clampf((float)opt->ior, 1.0f, 3.0f);
@@ -912,12 +967,14 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
     float prev_pad_px = g_tls_expand_pad_px;
     float prev_tx = g_tls_entity_tx, prev_ty = g_tls_entity_ty;
     int prev_small = g_tls_is_small_icon;
+    int prev_scope = g_tls_render_scope;
     g_tls_glass_contents = (uintptr_t)self;
     g_tls_bound_sharp_tex = 0;
     g_tls_expand_pad_px = 0.0f;
     g_tls_entity_tx = 0.0f;
     g_tls_entity_ty = 0.0f;
     g_tls_is_small_icon = 0;
+    g_tls_render_scope = LD_GLASS_SCOPE_GLOBAL;
 
     int expanded_rect = 0, expanded_alt = 0, expanded_geo = 0;
     float orig_rect[4] = {0, 0, 0, 0};
@@ -926,13 +983,45 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
     if (self && __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE)) {
         ld_prismal_update_motion(pass);
         ld_prismal_maybe_reload();
-        const struct ld_prismal_options *opts = ld_prismal_read_opts();
         float d = ld_prismal_get_density();
         memcpy(orig_geo, (const uint8_t *)self + 0x1c8u, sizeof orig_geo);
         g_tls_is_small_icon = (isfinite(orig_geo[0]) && isfinite(orig_geo[1]) &&
                                orig_geo[0] > 8.0f && orig_geo[1] > 8.0f &&
                                fmaxf(orig_geo[0], orig_geo[1]) < 115.0f * d &&
                                fabsf(orig_geo[0] - orig_geo[1]) < 16.0f * d);
+#ifdef LD_GLASS_SUPERELLIPSE_H
+        {
+            enum ld_glass_kind rkind = g_ld_gse_tls_kind;
+            if (rkind == LD_GLASS_KIND_NONE && isfinite(orig_geo[0]) && isfinite(orig_geo[1]) &&
+                orig_geo[0] > 8.0f && orig_geo[1] > 8.0f) {
+                float r_chk[4] = {0, 0, 0, 0}, a_chk[4] = {0, 0, 0, 0};
+                memcpy(r_chk, (const uint8_t *)self + 0x28u, sizeof r_chk);
+                memcpy(a_chk, (const uint8_t *)self + 0x1d8u, sizeof a_chk);
+                int use_alt_cls = (isfinite(a_chk[2]) && isfinite(a_chk[3]) &&
+                                   a_chk[2] > 8.0f && a_chk[3] > 8.0f &&
+                                   a_chk[2] < 4000.0f && a_chk[3] < 4000.0f);
+                float cw = use_alt_cls ? a_chk[2] : (r_chk[2] - r_chk[0]);
+                float qscale = (isfinite(cw) && cw > 8.0f) ? (orig_geo[0] / cw) : d;
+                if (!(qscale > 0.25f && qscale < 8.0f)) qscale = d;
+                float s = qscale / d;
+                float r_dp[4] = {
+                    (use_alt_cls ? a_chk[0] : r_chk[0]) * s,
+                    (use_alt_cls ? a_chk[1] : r_chk[1]) * s,
+                    (use_alt_cls ? (a_chk[0] + a_chk[2]) : r_chk[2]) * s,
+                    (use_alt_cls ? (a_chk[1] + a_chk[3]) : r_chk[3]) * s,
+                };
+                float w_dp = 0.0f, h_dp = 0.0f;
+                int is_dock = ld_gse_rect_is_dock(r_dp, &w_dp, &h_dp);
+                float cr_px = 0.0f;
+                memcpy(&cr_px, (const uint8_t *)self + 0x188u, sizeof cr_px);
+                float cr_dp = isfinite(cr_px) ? (cr_px / d) : 0.0f;
+                rkind = ld_gse_classify_rect(orig_geo[0] / d, orig_geo[1] / d, cr_dp, cr_dp,
+                                             is_dock, g_ld_gse_widget_corner);
+            }
+            g_tls_render_scope = ld_prismal_scope_for_kind(rkind);
+        }
+#endif
+        const struct ld_prismal_options *opts = ld_prismal_read_scope_opts(g_tls_render_scope);
         if (entity) {
             float m[16];
             memcpy(m, entity, sizeof m);
@@ -1074,6 +1163,7 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
     if (expanded_alt)  memcpy((uint8_t *)self + 0x1d8u, orig_alt, sizeof orig_alt);
     if (expanded_rect) memcpy((uint8_t *)self + 0x28u, orig_rect, sizeof orig_rect);
     if (expanded_geo)  memcpy((uint8_t *)self + 0x1c8u, orig_geo, sizeof orig_geo);
+    g_tls_render_scope = prev_scope;
     g_tls_is_small_icon = prev_small;
     g_tls_entity_tx = prev_tx;
     g_tls_entity_ty = prev_ty;
@@ -1112,8 +1202,27 @@ static uint8_t repl_bind_ubo(void *binder, void *buffer_view)
             uint8_t *mapped = g_fn_devbuf_get_contents(dev_buf);
             if (mapped) {
                 uint8_t *ubo = mapped + offset;
-                const struct ld_prismal_options *opts = ld_prismal_read_opts();
                 float density = ld_prismal_get_density();
+                int scope = g_tls_render_scope;
+#ifdef LD_GLASS_SUPERELLIPSE_H
+                if (scope == LD_GLASS_SCOPE_GLOBAL) {
+                    enum ld_glass_kind k = g_ld_gse_tls_kind;
+                    if (k == LD_GLASS_KIND_NONE) {
+                        float gx = 0.0f, gy = 0.0f, gz = 0.0f;
+                        memcpy(&gx, ubo + 0x10u, 4);
+                        memcpy(&gy, ubo + 0x14u, 4);
+                        memcpy(&gz, ubo + 0x18u, 4);
+                        float pad_px = g_tls_expand_pad_px > 0.0f ? g_tls_expand_pad_px : 0.0f;
+                        float eff_gx = fmaxf(gx - 2.0f * pad_px, 2.0f);
+                        float eff_gy = fmaxf(gy - 2.0f * pad_px, 2.0f);
+                        k = ld_gse_classify_rect(eff_gx / density, eff_gy / density,
+                                                 gz / density, gz / density, 0,
+                                                 g_ld_gse_widget_corner);
+                    }
+                    scope = ld_prismal_scope_for_kind(k);
+                }
+#endif
+                const struct ld_prismal_options *opts = ld_prismal_read_scope_opts(scope);
                 int sharp = g_tls_bound_sharp_tex;
 
                 float orig_ox = 0.0f, orig_oy = 0.0f;
@@ -1298,7 +1407,7 @@ static void ld_prismal_glass_install_ex(const struct native_api *api, int gui_en
     }
     if (initial_opts && initial_opts->ior >= 1.0) {
         pthread_mutex_lock(&g_prismal_conf_lock);
-        ld_prismal_publish_opts_locked(initial_opts);
+        ld_prismal_publish_opts_locked(initial_opts, NULL);
         pthread_mutex_unlock(&g_prismal_conf_lock);
         __atomic_store_n(&g_prismal_no_downsample,
                          initial_opts->disable_stationary_downsample ? 1 : 0,

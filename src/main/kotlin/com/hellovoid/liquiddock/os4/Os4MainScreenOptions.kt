@@ -131,6 +131,7 @@ data class Os4MainScreenOptions(
     val glassEnabled: Boolean = false,
     val softGlassEnabled: Boolean = false,
     val prismalOverrides: Map<String, Double> = emptyMap(),
+    val prismalScopeOverrides: Map<String, Map<String, Double>> = emptyMap(),
     val glassNativeOverrides: Map<String, Double> = emptyMap(),
     val glassDockOverrides: Map<String, Double> = emptyMap(),
     val glassIconOverrides: Map<String, Double> = emptyMap(),
@@ -279,6 +280,19 @@ data class Os4MainScreenOptions(
                 add(spec.configKey.name())
                 if (spec.isDp) add("${spec.configKey.name()}_tenths")
             }
+            listOf(
+                com.hellovoid.liquiddock.ScopedGlassOptics.DOCK,
+                com.hellovoid.liquiddock.ScopedGlassOptics.ICON,
+                com.hellovoid.liquiddock.ScopedGlassOptics.WIDGET,
+                com.hellovoid.liquiddock.ScopedGlassOptics.LARGE_FOLDER,
+            ).forEach { scope ->
+                com.hellovoid.liquiddock.ScopedGlassOptics.keysForScope(scope).forEach { key ->
+                    val k = com.hellovoid.liquiddock.ScopedGlassOptics.key(scope, key)
+                    add(k)
+                    if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) add("${k}_tenths")
+                }
+                add(com.hellovoid.liquiddock.ScopedGlassOptics.normalsKey(scope))
+            }
             add(GlassEdgeEffects.key(GlassEdgeEffects.ICON, ConfigSchema.Glass.BACKLIT_ENABLED))
             add(GlassEdgeEffects.key(GlassEdgeEffects.ICON, ConfigSchema.Glass.OUTER_SHADOW_ENABLED))
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
@@ -383,35 +397,47 @@ data class Os4MainScreenOptions(
                 val dividerEnabled = boolean(ConfigSchema.Divider.ENABLED)
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
                 val softGlassEnabled = boolean(ConfigSchema.Glass.SOFT_GLASS_ENABLED)
-                val prismalOverrides = if (glassEnabled) {
-                    buildMap {
-                        for (spec in prismalSpecs) {
-                            val name = spec.configKey.name()
-                            val tenthsName = "${name}_tenths"
-                            if (spec.isBool) {
-                                if (values.containsKey(name)) {
-                                    @Suppress("UNCHECKED_CAST")
-                                    val bKey = spec.configKey as ConfigKey<Boolean>
-                                    put(spec.confKey, if (boolean(bKey)) 1.0 else 0.0)
-                                }
-                            } else if (spec.isDp) {
-                                if (values.containsKey(name) || values.containsKey(tenthsName)) {
-                                    @Suppress("UNCHECKED_CAST")
-                                    val iKey = spec.configKey as ConfigKey<Int>
-                                    val v = dp(iKey)
-                                    require(v.isFinite() && v in spec.min..spec.max)
-                                    put(spec.confKey, v)
-                                }
-                            } else {
-                                if (values.containsKey(name)) {
-                                    @Suppress("UNCHECKED_CAST")
-                                    val iKey = spec.configKey as ConfigKey<Int>
-                                    val v = integer(iKey).toDouble() / spec.divisor
-                                    require(v.isFinite() && v in spec.min..spec.max)
-                                    put(spec.confKey, v)
-                                }
+                fun collectPrismalMap(scope: String?): Map<String, Double> = buildMap {
+                    val scopedSet = scope?.let { com.hellovoid.liquiddock.ScopedGlassOptics.keysForScope(it).toSet() }
+                    for (spec in prismalSpecs) {
+                        if (scope != null && spec.configKey !in scopedSet!! &&
+                            spec.configKey != ConfigSchema.Glass.PRISMAL_SHOW_NORMALS) continue
+                        val name = if (scope == null) {
+                            spec.configKey.name()
+                        } else if (spec.configKey == ConfigSchema.Glass.PRISMAL_SHOW_NORMALS) {
+                            com.hellovoid.liquiddock.ScopedGlassOptics.normalsKey(scope)
+                        } else {
+                            @Suppress("UNCHECKED_CAST")
+                            com.hellovoid.liquiddock.ScopedGlassOptics.key(scope, spec.configKey as ConfigKey<Int>)
+                        }
+                        val tenthsName = "${name}_tenths"
+                        if (spec.isBool) {
+                            if (values.containsKey(name)) {
+                                val bVal = values[name] as? Boolean ?: continue
+                                put(spec.confKey, if (bVal) 1.0 else 0.0)
+                            }
+                        } else if (spec.isDp) {
+                            if (values.containsKey(name) || values.containsKey(tenthsName)) {
+                                @Suppress("UNCHECKED_CAST")
+                                val iKey = spec.configKey as ConfigKey<Int>
+                                val raw = (values[name] as? Number)?.toInt() ?: iKey.uiDefault()
+                                val tenths = (values[tenthsName] as? Number)?.toInt()
+                                val v = if (tenths != null) tenths / 10.0 else raw.toDouble()
+                                require(v.isFinite() && v in spec.min..spec.max)
+                                put(spec.confKey, v)
+                            }
+                        } else {
+                            if (values.containsKey(name)) {
+                                @Suppress("UNCHECKED_CAST")
+                                val iKey = spec.configKey as ConfigKey<Int>
+                                val raw = (values[name] as? Number)?.toInt() ?: iKey.uiDefault()
+                                val v = raw.toDouble() / spec.divisor
+                                require(v.isFinite() && v in spec.min..spec.max)
+                                put(spec.confKey, v)
                             }
                         }
+                    }
+                    if (scope == null) {
                         val iconBacklitKey = GlassEdgeEffects.key(GlassEdgeEffects.ICON, ConfigSchema.Glass.BACKLIT_ENABLED)
                         (values[iconBacklitKey] as? Boolean)?.let {
                             put("prismal_icon_backlit_enabled", if (it) 1.0 else 0.0)
@@ -421,6 +447,15 @@ data class Os4MainScreenOptions(
                             put("prismal_icon_outer_shadow_enabled", if (it) 1.0 else 0.0)
                         }
                     }
+                }
+                val prismalOverrides = if (glassEnabled) collectPrismalMap(null) else emptyMap()
+                val prismalScopeOverrides = if (glassEnabled) {
+                    listOf(
+                        com.hellovoid.liquiddock.ScopedGlassOptics.DOCK,
+                        com.hellovoid.liquiddock.ScopedGlassOptics.ICON,
+                        com.hellovoid.liquiddock.ScopedGlassOptics.WIDGET,
+                        com.hellovoid.liquiddock.ScopedGlassOptics.LARGE_FOLDER,
+                    ).associateWith { collectPrismalMap(it) }.filterValues { it.isNotEmpty() }
                 } else emptyMap()
                 val anyGlass = glassEnabled || softGlassEnabled
                 val glassIcons = anyGlass && boolean(ConfigSchema.Glass.ICON_GLASS)
@@ -517,6 +552,7 @@ data class Os4MainScreenOptions(
                             glassEnabled = glassEnabled,
                             softGlassEnabled = softGlassEnabled,
                             prismalOverrides = prismalOverrides,
+                            prismalScopeOverrides = prismalScopeOverrides,
                             glassNativeOverrides = nativeGlassOverrides,
                             glassDockOverrides = dockGlassOverrides,
                             glassIconOverrides = iconGlassOverrides,

@@ -112,6 +112,7 @@
     <string name="page_dock_geometry">Dock 几何</string>
     <string name="page_glass_components">液态玻璃组件</string>
     <string name="page_glass_icons">图标与控件</string>
+    <string name="page_dock_glass">Dock 栏玻璃参数</string>
     <string name="page_glass_widgets">小组件</string>
     <string name="page_glass_folders">文件夹</string>
     <string name="page_glass_menus">菜单与弹窗</string>

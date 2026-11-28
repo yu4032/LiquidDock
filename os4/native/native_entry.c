@@ -1844,6 +1844,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     int se_on = any_glass && g_home_options.prismal.continuous_corners;
     ld_prismal_glass_install_ex(api, g_home_options.glass_enabled,
                                 &g_home_options.prismal);
+    ld_prismal_publish_scoped_opts(&g_home_options.prismal, g_home_options.prismal_scopes);
     ld_superellipse_blur_install(se_on);
     ld_glass_superellipse_install(api, se_on,
                                   (float)g_home_options.large_folder_corner,

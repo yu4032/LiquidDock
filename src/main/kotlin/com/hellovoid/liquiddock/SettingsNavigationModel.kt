@@ -58,6 +58,10 @@ internal enum class Page(val titleRes: Int) {
     LiquidSampling(R.string.page_liquid_sampling),
 
     GlassComponents(R.string.page_glass_components),
+    DockGlassAll(R.string.page_dock_glass),
+    IconGlassAll(R.string.page_glass_icons),
+    WidgetGlassAll(R.string.page_glass_widgets),
+    LargeFolderGlassAll(R.string.page_glass_folders),
     GlassIcons(R.string.page_glass_icons),
     GlassWidgets(R.string.page_glass_widgets),
     GlassFolders(R.string.page_glass_folders),
@@ -170,9 +174,10 @@ internal val liquidEntries = listOf(
 )
 
 internal val componentEntries = listOf(
-    HubEntry(Page.GlassIcons, R.string.page_glass_icons, "桌面与 Dock 图标玻璃、下采样、尺寸与圆角"),
-    HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、圆角与内部节点隐藏"),
-    HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大文件夹玻璃开关、2×1 与大文件夹独立圆角、小文件夹圆角"),
+    HubEntry(Page.DockGlassAll, R.string.page_dock_glass, "独立调节 Dock 栏液态玻璃材质；未设置参数继承全局"),
+    HubEntry(Page.GlassIcons, R.string.page_glass_icons, "桌面与 Dock 图标玻璃、独立材质、下采样、尺寸与圆角"),
+    HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、独立材质、圆角与内部节点隐藏"),
+    HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大文件夹玻璃开关、独立材质与圆角"),
     HubEntry(Page.GlassMenus, R.string.page_glass_menus, "系统顶部菜单、快捷菜单与对话弹窗"),
     HubEntry(Page.SidebarEdge, R.string.page_sidebar_glass, "模糊、颜色、透明度、圆角与玻璃高光"),
 )

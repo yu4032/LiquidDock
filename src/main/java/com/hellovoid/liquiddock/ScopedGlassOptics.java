@@ -21,6 +21,10 @@ public final class ScopedGlassOptics {
     public static final String DIALOG = "dialog";
     public static final String POPUP = "popup";
     public static final String HANDLE_MENU = "handle_menu";
+    public static final String DOCK = "dock";
+    public static final String ICON = "icon";
+    public static final String WIDGET = "widget";
+    public static final String LARGE_FOLDER = "large_folder";
 
     // Menu-owned controls do not add duplicate global material keys.
     private static final List<ConfigKey<Integer>> MENU_BASICS = Collections.unmodifiableList(
@@ -85,7 +89,7 @@ public final class ScopedGlassOptics {
 
     public static List<ConfigKey<Integer>> keysForScope(String scope) {
         validateScope(scope);
-        if (!isMenuScope(scope)) return OPTICAL_KEYS;
+        if (!isMenuScope(scope) && !isLauncherComponentScope(scope)) return OPTICAL_KEYS;
         List<ConfigKey<Integer>> keys = new ArrayList<>(MENU_BASICS);
         keys.addAll(OPTICAL_KEYS);
         return Collections.unmodifiableList(keys);
@@ -93,6 +97,11 @@ public final class ScopedGlassOptics {
 
     public static boolean isMenuScope(String scope) {
         return POPUP.equals(scope) || HANDLE_MENU.equals(scope);
+    }
+
+    public static boolean isLauncherComponentScope(String scope) {
+        return DOCK.equals(scope) || ICON.equals(scope)
+                || WIDGET.equals(scope) || LARGE_FOLDER.equals(scope);
     }
 
     public static List<ConfigKey<Boolean>> menuHighlightKeys() {
@@ -118,7 +127,8 @@ public final class ScopedGlassOptics {
     public static String key(String scope, ConfigKey<Integer> original) {
         validateScope(scope);
         if (!OPTICAL_KEYS.contains(original)
-                && !(isMenuScope(scope) && MENU_BASICS.contains(original))) {
+                && !((isMenuScope(scope) || isLauncherComponentScope(scope))
+                && MENU_BASICS.contains(original))) {
             throw new IllegalArgumentException("not a scoped glass key: " + original.name());
         }
         return prefix(scope, original.name());
@@ -137,7 +147,8 @@ public final class ScopedGlassOptics {
     }
 
     private static void validateScope(String scope) {
-        if (!GBOARD.equals(scope) && !SEARCHBOX.equals(scope) && !DIALOG.equals(scope) && !isMenuScope(scope)) {
+        if (!GBOARD.equals(scope) && !SEARCHBOX.equals(scope) && !DIALOG.equals(scope)
+                && !isMenuScope(scope) && !isLauncherComponentScope(scope)) {
             throw new IllegalArgumentException("unsupported scope: " + scope);
         }
     }
